@@ -1,0 +1,22 @@
+# =====================================================
+# Vision AI - Python AI Service dependencies
+#
+# IMPORTANT: Install PyTorch FIRST from the CUDA index,
+# THEN run:  pip install -r requirements.txt
+# Otherwise pip installs the slow CPU-only PyTorch.
+# =====================================================
+
+# --- Web framework ---
+fastapi
+uvicorn[standard]
+python-multipart
+python-dotenv
+
+# --- Image handling ---
+numpy
+pillow
+opencv-contrib-python
+
+# --- AI models ---
+ultralytics
+easyocr

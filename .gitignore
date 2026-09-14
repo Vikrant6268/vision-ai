@@ -1,0 +1,36 @@
+# ---------- Secrets (NEVER commit) ----------
+.env
+.env.local
+*.key
+*.pem
+
+# ---------- Node.js ----------
+node_modules/
+npm-debug.log*
+
+# ---------- Python ----------
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# ---------- AI model weights (large, re-downloadable) ----------
+*.pt
+*.onnx
+ai-service/models/*
+!ai-service/models/.gitkeep
+
+# ---------- Runtime data ----------
+data/*.db
+data/*.db-journal
+data/captures/*
+!data/captures/.gitkeep
+
+# ---------- OS / Editor ----------
+Thumbs.db
+.DS_Store
+.idea/
+
+# ---------- Local caches (kept off C: drive) ----------
+.cache/
