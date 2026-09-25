@@ -24,12 +24,13 @@ import * as speech from './speech.js';
 import * as camera from './camera.js';
 import { t, getLanguage } from './languages.js';
 
-// How often to look. ~1.2 checks/second is enough for walking pace and
-// leaves the CPU free for everything else.
-const INTERVAL_MS = 800;
+// How often to look. Detection takes about 80ms, so 2 checks/second
+// leaves plenty of headroom. Raised from 1.2/s after testing showed
+// warnings arriving too late.
+const INTERVAL_MS = 500;
 
 // Don't repeat the same warning more often than this.
-const COOLDOWN_MS = 5000;
+const COOLDOWN_MS = 4000;
 
 // Give up on a frame that takes too long rather than queueing requests.
 const REQUEST_TIMEOUT_MS = 4000;

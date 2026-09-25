@@ -41,8 +41,17 @@ function buildPrompt(languageCode) {
   ].join(' ');
 }
 
+// Reading printed text is a different job from describing a scene, so
+// it gets its own prompt: copy exactly, invent nothing.
+const OCR_PROMPT = [
+  'Read all the text in this image exactly as printed.',
+  'Output only the text itself, with no explanation and no translation.',
+  'Preserve the original script and spelling.',
+  'If there is no readable text, output exactly: NO_TEXT',
+].join(' ');
+
 // One attempt. Returns { text } on success, or { retryable, error }.
-async function attempt(base64Image, mimeType, languageCode, model) {
+async function attempt(base64Image, mimeType, languageCode, model, prompt = null) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
@@ -58,7 +67,7 @@ async function attempt(base64Image, mimeType, languageCode, model) {
       body: JSON.stringify({
         contents: [{
           parts: [
-            { text: buildPrompt(languageCode) },
+            { text: prompt ?? buildPrompt(languageCode) },
             { inline_data: { mime_type: mimeType, data: base64Image } },
           ],
         }],
@@ -116,7 +125,7 @@ async function attempt(base64Image, mimeType, languageCode, model) {
   return { text };
 }
 
-export async function describeImage(base64Image, mimeType, languageCode) {
+async function run(base64Image, mimeType, languageCode, prompt) {
   if (!config.geminiApiKey || config.geminiApiKey === 'your_key_here') {
     throw userError('Scene description is not set up on this server.', 503);
   }
@@ -129,7 +138,7 @@ export async function describeImage(base64Image, mimeType, languageCode) {
   let last;
 
   for (let i = 0; i < plan.length; i++) {
-    last = await attempt(base64Image, mimeType, languageCode, plan[i]);
+    last = await attempt(base64Image, mimeType, languageCode, plan[i], prompt);
 
     if (last.text) return last.text;
     if (!last.retryable) break;
@@ -141,4 +150,16 @@ export async function describeImage(base64Image, mimeType, languageCode) {
   }
 
   throw last.error;
+}
+
+export function describeImage(base64Image, mimeType, languageCode) {
+  return run(base64Image, mimeType, languageCode, null);
+}
+
+// Read printed text. Returns '' when the image has no readable text,
+// so the caller can say so rather than inventing something.
+export async function readImageText(base64Image, mimeType) {
+  const text = await run(base64Image, mimeType, 'en', OCR_PROMPT);
+  // Collapse the line breaks in signage into one spoken line.
+  return text === 'NO_TEXT' ? '' : text.replace(/\s+/g, ' ').trim();
 }

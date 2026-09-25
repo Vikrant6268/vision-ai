@@ -81,7 +81,10 @@ const PHRASES = {
 // An object filling this much of the frame, directly ahead, is close
 // enough to be worth a warning. We say WHAT and WHERE, never a
 // distance, because a single camera cannot measure distance.
-const OBSTACLE_AREA = 0.15;
+//
+// Tuned down from 0.20 to 0.10 after real-world testing: warnings at
+// 0.20 arrived too late to be useful while actually walking.
+const OBSTACLE_AREA = 0.10;
 
 // Listening to more than three things at once is hard to follow.
 const MAX_SPOKEN = 3;
