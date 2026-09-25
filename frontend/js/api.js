@@ -35,6 +35,14 @@ export function checkHealth() {
   return request('/health');
 }
 
+export function describeScene(imageDataUrl, language) {
+  return request('/vision/describe', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ image: imageDataUrl, language }),
+  });
+}
+
 // ---------- MOCK (replaced in later phases) ----------
 const MOCK_DELAY_MS = 800;
 
@@ -50,10 +58,6 @@ export function detectObjects() {
 
 export function readText() {
   return mockRequest('The text says: Welcome to Vision AI.');
-}
-
-export function describeScene() {
-  return mockRequest('You are in a room with a table, a laptop, and a window on the left.');
 }
 
 export function recognizePerson() {

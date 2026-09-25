@@ -11,6 +11,11 @@ export const config = {
   port:         Number(process.env.PORT) || 3000,
   pythonAiUrl:  process.env.PYTHON_AI_URL || 'http://127.0.0.1:8000',
   geminiApiKey: process.env.GEMINI_API_KEY || '',
+  geminiModel:  process.env.GEMINI_MODEL || 'gemini-flash-lite-latest',
+  geminiFallbackModel: process.env.GEMINI_FALLBACK_MODEL || 'gemini-3.5-flash-lite',
+  ttsModel:     process.env.TTS_MODEL || 'gemini-3.8-flash-tts',
+  ttsVoice:     process.env.TTS_VOICE || 'Kore',
+  ttsDailyLimit: Number(process.env.TTS_DAILY_LIMIT) || 200,
   dbPath:       process.env.DB_PATH || './data/vision_ai.db',
 };
 

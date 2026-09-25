@@ -1,20 +1,23 @@
 // =====================================================================
 // app.js – main controller.
 //
-// Connects the buttons to features, manages the status text, and speaks
-// every response. The camera (Phase 6) and voice input (Phase 9) will
-// plug into the same `actions` table below, so a spoken command and a
-// button press always do exactly the same thing.
+// Connects buttons to features, manages the status text, and speaks
+// every response. Voice commands (Phase 9) will call the SAME `actions`
+// table, so a spoken command and a button press always behave
+// identically.
 // =====================================================================
 
 import * as api from './api.js';
 import * as speech from './speech.js';
+import * as camera from './camera.js';
+import { t, getLanguage, setLanguage } from './languages.js';
 
 const statusEl   = document.getElementById('status');
 const responseEl = document.getElementById('response');
 const micBtn     = document.getElementById('btn-mic');
+const languageEl = document.getElementById('language');
 
-let busy = false;      // true while a feature is running – blocks double-taps
+let busy = false;      // true while a feature runs – blocks double-taps
 let responseId = 0;    // lets us ignore "finished" events from cancelled speech
 
 function setStatus(text) {
@@ -26,45 +29,90 @@ function setStatus(text) {
 async function respond(text) {
   const id = ++responseId;
   responseEl.textContent = text;
-  setStatus('Speaking...');
+  setStatus(t('speaking'));
   await speech.speak(text);
-  if (id === responseId) setStatus('Ready');   // only if nothing newer started
+  if (id === responseId) setStatus(t('ready'));   // only if nothing newer started
 }
 
-// Run one feature end-to-end: guard against double-taps, show progress,
-// call the API, speak the result, handle failure gracefully.
+// Make sure the camera is running before a feature that needs a photo.
+// A blind user should never have to "turn the camera on" first – we do
+// it for them, and only explain if it fails.
+async function ensureCamera() {
+  if (camera.isOn()) return true;
+
+  setStatus(t('cameraStarting'));
+  try {
+    await camera.start();
+    return true;
+  } catch (error) {
+    await respond(t(error.code || 'cameraMissing'));
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------
+// Features
+// ---------------------------------------------------------------------
+
+// Take a photo and ask the AI what it shows.
+async function describeScene() {
+  if (busy) return;
+  busy = true;
+
+  try {
+    if (!(await ensureCamera())) return;
+
+    setStatus(t('processing'));
+    const photo = camera.capture();
+    const result = await api.describeScene(photo, getLanguage());
+    await respond(result.message);
+  } catch (error) {
+    console.error(error);
+    await respond(error.message);   // api.js guarantees this is speakable
+  } finally {
+    busy = false;
+  }
+}
+
+// Shared runner for the features that are still mocked.
 async function runFeature(apiCall) {
   if (busy) return;
   busy = true;
-  setStatus('Processing...');
+  setStatus(t('processing'));
 
   try {
     const result = await apiCall();
     await respond(result.message);
   } catch (error) {
     console.error(error);
-    await respond(error.message);   // api.js guarantees this is user-friendly
+    await respond(error.message);
   } finally {
     busy = false;
   }
 }
 
+async function toggleCamera() {
+  if (camera.isOn()) {
+    camera.stop();
+    await respond(t('cameraOff'));
+  } else if (await ensureCamera()) {
+    await respond(t('cameraOn'));
+  }
+}
+
 // ---------------------------------------------------------------------
-// Actions – one entry per feature.
-// The key matches the button's data-action attribute in index.html.
+// Actions – one entry per feature. The key matches the button's
+// data-action attribute in index.html.
 // ---------------------------------------------------------------------
 const actions = {
-  camera:   () => respond('The camera will be connected in a later step.'),
+  camera:   toggleCamera,
+  describe: describeScene,
   read:     () => runFeature(api.readText),
   detect:   () => runFeature(api.detectObjects),
-  describe: () => runFeature(api.describeScene),
   person:   () => runFeature(api.recognizePerson),
-  repeat:   () => respond(speech.getLastSpoken() || 'There is nothing to repeat yet.'),
-  stop:     () => { speech.stop(); setStatus('Ready'); },
-  help:     () => respond(
-    'You can say: read this, detect objects, describe surroundings, ' +
-    'who is this, repeat, stop, or help.'
-  ),
+  repeat:   () => respond(speech.getLastSpoken() || t('nothingToRepeat')),
+  stop:     () => { speech.stop(); setStatus(t('ready')); },
+  help:     () => respond(t('help')),
 };
 
 // ---------------------------------------------------------------------
@@ -75,14 +123,20 @@ document.querySelectorAll('[data-action]').forEach((button) => {
 });
 
 micBtn.addEventListener('click', () => {
-  setStatus('Listening...');
+  setStatus(t('listening'));
   respond('Voice commands will be connected in a later step. Please use the buttons for now.');
+});
+
+languageEl.value = getLanguage();
+languageEl.addEventListener('change', () => {
+  setLanguage(languageEl.value);
+  setStatus(t('ready'));
+  respond(t('languageSet'));     // spoken confirmation in the NEW language
 });
 
 // Keyboard shortcuts: Space = talk, Escape = stop.
 // We check event.key (not event.code) because on-screen keyboards and
 // assistive devices often set only event.key.
-// Space is ignored when a button has focus, otherwise it would fire twice.
 document.addEventListener('keydown', (event) => {
   const onControl = ['BUTTON', 'INPUT', 'SELECT', 'TEXTAREA'].includes(event.target.tagName);
 
@@ -94,13 +148,16 @@ document.addEventListener('keydown', (event) => {
   }
 });
 
+// Stop the camera when the tab is closed, so the webcam light goes off.
+window.addEventListener('pagehide', () => camera.stop());
+
 // ---------------------------------------------------------------------
 // Startup: confirm the backend is reachable. If it isn't, say so on the
 // screen now and aloud on the first tap – never fail silently.
 // ---------------------------------------------------------------------
 api.checkHealth()
-  .then(() => setStatus('Ready'))
+  .then(() => setStatus(t('ready')))
   .catch((error) => {
     console.error(error);
-    setStatus('Server not reachable');
+    setStatus(t('serverDown'));
   });

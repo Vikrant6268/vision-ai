@@ -18,8 +18,10 @@ export function errorHandler(err, req, res, next) {
 
   console.error(`[error] ${req.method} ${req.originalUrl} → ${status}`, err.message);
 
-  // 4xx errors carry a message written for the user; 5xx get a safe generic one.
-  const message = status < 500
+  // Messages written FOR the user are marked `expose` and always pass
+  // through, whatever the status code. Unexpected errors get a safe
+  // generic message so we never leak internal details to the browser.
+  const message = (status < 500 || err.expose)
     ? err.message
     : 'Something went wrong on the server. Please try again.';
 

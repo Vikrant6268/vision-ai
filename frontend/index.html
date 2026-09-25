@@ -20,6 +20,17 @@
 
   <main id="main" class="app-main">
 
+    <!-- LANGUAGE: controls speech recognition, AI replies and the voice -->
+    <section class="language-section">
+      <label for="language">Language</label>
+      <select id="language" class="language-select">
+        <option value="en">English</option>
+        <option value="hi">हिंदी (Hindi)</option>
+        <option value="mr">मराठी (Marathi)</option>
+        <option value="gu">ગુજરાતી (Gujarati)</option>
+      </select>
+    </section>
+
     <!-- STATUS: aria-live makes screen readers announce every change -->
     <section class="status-section" aria-label="Status">
       <p id="status" role="status" aria-live="polite">Ready</p>

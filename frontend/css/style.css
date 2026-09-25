@@ -201,3 +201,30 @@ body {
   font-size: 1.25rem;
   min-height: 1.9rem;
 }
+
+/* ---------- Language selector ---------- */
+.language-section {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.language-section label {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.language-select {
+  min-height: 3rem;
+  padding: 0.5rem 0.75rem;
+  font: inherit;
+  font-size: 1.1rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 3px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+}
