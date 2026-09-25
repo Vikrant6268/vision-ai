@@ -228,3 +228,12 @@ body {
   border-radius: 12px;
   cursor: pointer;
 }
+
+/* ---------- Walk Mode ---------- */
+/* The active state is shown by colour AND the pressed border, never by
+   colour alone, and screen readers get aria-pressed. */
+.action-btn.walk.active {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
+}

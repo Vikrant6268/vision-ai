@@ -98,6 +98,12 @@ export function stop() {
   }
 }
 
+// Walk Mode checks this so it never starts a new alert mid-sentence.
+export function isSpeaking() {
+  if (audio && !audio.paused && !audio.ended) return true;
+  return 'speechSynthesis' in window && window.speechSynthesis.speaking;
+}
+
 // Used by the "Repeat" feature.
 export function getLastSpoken() {
   return lastSpoken;

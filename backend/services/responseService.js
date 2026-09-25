@@ -113,6 +113,46 @@ function article(word) {
   return /^[aeiou]/i.test(word) ? 'an' : 'a';
 }
 
+// Short, urgent phrasing for Walk Mode. A full sentence takes too long
+// to speak when someone is moving toward something.
+const ALERTS = {
+  en: { left: 'Careful, {obj} on your left.',    center: 'Careful, {obj} ahead.',    right: 'Careful, {obj} on your right.' },
+  hi: { left: 'सावधान, बाईं ओर {obj}।',          center: 'सावधान, सामने {obj}।',      right: 'सावधान, दाईं ओर {obj}।' },
+  mr: { left: 'सावधान, डावीकडे {obj}.',          center: 'सावधान, समोर {obj}.',       right: 'सावधान, उजवीकडे {obj}.' },
+  gu: { left: 'સાવધાન, ડાબી બાજુ {obj}.',        center: 'સાવધાન, સામે {obj}.',       right: 'સાવધાન, જમણી બાજુ {obj}.' },
+};
+
+/**
+ * Walk Mode: return a short warning, or null when nothing needs saying.
+ *
+ * Only objects that are BOTH large (close) and in the user's path get
+ * announced. Everything else stays silent - constant chatter would make
+ * the app unusable while walking.
+ *
+ * Returns { alert, key } where `key` identifies the thing being warned
+ * about, so the caller can avoid repeating the same warning.
+ */
+export function buildAlert(objects, lang = 'en') {
+  if (!objects || objects.length === 0) return null;
+
+  // Objects directly ahead matter most; something large to the side is
+  // worth a mention only if it is very large.
+  const candidate = objects.find(
+    (o) => (o.position === 'center' && o.area >= OBSTACLE_AREA)
+        || (o.position !== 'center' && o.area >= OBSTACLE_AREA * 2),
+  );
+
+  if (!candidate) return null;
+
+  const template = (ALERTS[lang] ?? ALERTS.en)[candidate.position];
+  const word = name(candidate.label, lang, 1);
+
+  return {
+    alert: template.replace('{obj}', word),
+    key: `${candidate.label}|${candidate.position}`,
+  };
+}
+
 /**
  * Build the spoken sentence for a set of detections.
  *

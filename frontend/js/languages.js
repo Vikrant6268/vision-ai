@@ -24,6 +24,8 @@ export const UI = {
     nothingToRepeat: 'There is nothing to repeat yet.',
     help: 'You can say: describe surroundings, read this, detect objects, who is this, repeat, stop, or help.',
     languageSet: 'Language set to English.',
+    walkOn: 'Walk mode on. I will warn you about obstacles ahead. This is an aid, so please stay careful.',
+    walkOff: 'Walk mode off.',
   },
   hi: {
     speechTag: 'hi-IN',
@@ -40,6 +42,8 @@ export const UI = {
     nothingToRepeat: 'दोहराने के लिए अभी कुछ नहीं है।',
     help: 'आप कह सकते हैं: आसपास बताओ, यह पढ़ो, वस्तुएँ पहचानो, यह कौन है, दोहराओ, रुको, या मदद।',
     languageSet: 'भाषा हिंदी कर दी गई है।',
+    walkOn: 'चलने का मोड चालू। मैं सामने की रुकावटों के बारे में बताऊँगा। यह केवल सहायता है, कृपया सावधान रहें।',
+    walkOff: 'चलने का मोड बंद।',
   },
   mr: {
     speechTag: 'mr-IN',
@@ -56,6 +60,8 @@ export const UI = {
     nothingToRepeat: 'पुन्हा सांगण्यासारखे अजून काही नाही.',
     help: 'तुम्ही म्हणू शकता: आजूबाजूला काय आहे, हे वाचा, वस्तू ओळखा, हे कोण आहे, पुन्हा सांगा, थांबा, किंवा मदत.',
     languageSet: 'भाषा मराठी केली आहे.',
+    walkOn: 'चालण्याचा मोड सुरू. मी समोरच्या अडथळ्यांबद्दल सांगेन. ही फक्त मदत आहे, कृपया सावध राहा.',
+    walkOff: 'चालण्याचा मोड बंद.',
   },
   gu: {
     speechTag: 'gu-IN',
@@ -72,6 +78,8 @@ export const UI = {
     nothingToRepeat: 'પુનરાવર્તન કરવા માટે હજી કંઈ નથી.',
     help: 'તમે કહી શકો છો: આસપાસ શું છે, આ વાંચો, વસ્તુઓ ઓળખો, આ કોણ છે, ફરીથી કહો, બંધ કરો, અથવા મદદ.',
     languageSet: 'ભાષા ગુજરાતી કરવામાં આવી છે.',
+    walkOn: 'ચાલવાનો મોડ ચાલુ. હું સામેના અવરોધો વિશે જણાવીશ. આ માત્ર મદદ છે, કૃપા કરીને સાવધ રહો.',
+    walkOff: 'ચાલવાનો મોડ બંધ.',
   },
 };
 

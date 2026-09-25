@@ -10,6 +10,7 @@
 import * as api from './api.js';
 import * as speech from './speech.js';
 import * as camera from './camera.js';
+import * as walk from './walk.js';
 import { t, getLanguage, setLanguage } from './languages.js';
 
 const statusEl   = document.getElementById('status');
@@ -92,8 +93,21 @@ async function runFeature(apiCall) {
   }
 }
 
+// Walk Mode needs the camera running continuously.
+async function toggleWalk() {
+  if (walk.isRunning()) {
+    await walk.stop();
+    await respond(t('walkOff'));
+    return;
+  }
+
+  if (!(await ensureCamera())) return;
+  await walk.start();
+}
+
 async function toggleCamera() {
   if (camera.isOn()) {
+    await walk.stop();
     camera.stop();
     await respond(t('cameraOff'));
   } else if (await ensureCamera()) {
@@ -107,12 +121,13 @@ async function toggleCamera() {
 // ---------------------------------------------------------------------
 const actions = {
   camera:   toggleCamera,
+  walk:     toggleWalk,
   describe: () => withPhoto(api.describeScene),
   read:     () => runFeature(api.readText),
   detect:   () => withPhoto(api.detectObjects),
   person:   () => runFeature(api.recognizePerson),
   repeat:   () => respond(speech.getLastSpoken() || t('nothingToRepeat')),
-  stop:     () => { speech.stop(); setStatus(t('ready')); },
+  stop:     () => { walk.stop(); speech.stop(); setStatus(t('ready')); },
   help:     () => respond(t('help')),
 };
 
@@ -121,6 +136,14 @@ const actions = {
 // ---------------------------------------------------------------------
 document.querySelectorAll('[data-action]').forEach((button) => {
   button.addEventListener('click', () => actions[button.dataset.action]());
+});
+
+// Keep the button's pressed state in sync, including when Walk Mode
+// stops by itself. aria-pressed is what a screen reader announces.
+const walkBtn = document.getElementById('btn-walk');
+walk.onChange((active) => {
+  walkBtn.setAttribute('aria-pressed', String(active));
+  walkBtn.classList.toggle('active', active);
 });
 
 micBtn.addEventListener('click', () => {
@@ -150,7 +173,7 @@ document.addEventListener('keydown', (event) => {
 });
 
 // Stop the camera when the tab is closed, so the webcam light goes off.
-window.addEventListener('pagehide', () => camera.stop());
+window.addEventListener('pagehide', () => { walk.stop(); camera.stop(); });
 
 // ---------------------------------------------------------------------
 // Startup: confirm the backend is reachable. If it isn't, say so on the

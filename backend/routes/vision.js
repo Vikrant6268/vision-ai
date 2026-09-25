@@ -10,7 +10,7 @@
 import { Router } from 'express';
 import { describeImage } from '../services/aiService.js';
 import { detectObjects } from '../services/pythonService.js';
-import { describeDetections } from '../services/responseService.js';
+import { describeDetections, buildAlert } from '../services/responseService.js';
 import { isSupported, DEFAULT_LANGUAGE, LANGUAGES } from '../config/languages.js';
 
 const router = Router();
@@ -74,10 +74,15 @@ router.post('/detect', async (req, res, next) => {
     const result = await detectObjects(parsed.base64);
     const { message, warning } = describeDetections(result.objects, languageCode);
 
+    // Walk Mode needs a short urgent phrase instead of a full sentence.
+    const alert = buildAlert(result.objects, languageCode);
+
     res.json({
       ok: true,
       message,
       warning,
+      alert: alert?.alert ?? null,
+      alertKey: alert?.key ?? null,
       count: result.count,
       device: result.device,
       objects: result.objects,   // raw data, useful for debugging and the viva
