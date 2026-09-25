@@ -9,6 +9,8 @@
 
 import { Router } from 'express';
 import { describeImage } from '../services/aiService.js';
+import { detectObjects } from '../services/pythonService.js';
+import { describeDetections } from '../services/responseService.js';
 import { isSupported, DEFAULT_LANGUAGE, LANGUAGES } from '../config/languages.js';
 
 const router = Router();
@@ -54,6 +56,34 @@ router.post('/describe', async (req, res, next) => {
     res.json({ ok: true, message, language: languageCode });
   } catch (error) {
     next(error);   // handled by middleware/errorHandler.js
+  }
+});
+
+router.post('/detect', async (req, res, next) => {
+  try {
+    const { image, language } = req.body || {};
+
+    const parsed = parseDataUrl(image);
+    if (!parsed) {
+      const error = new Error('No picture was received. Please try again.');
+      error.status = 400;
+      throw error;
+    }
+
+    const languageCode = isSupported(language) ? language : DEFAULT_LANGUAGE;
+    const result = await detectObjects(parsed.base64);
+    const { message, warning } = describeDetections(result.objects, languageCode);
+
+    res.json({
+      ok: true,
+      message,
+      warning,
+      count: result.count,
+      device: result.device,
+      objects: result.objects,   // raw data, useful for debugging and the viva
+    });
+  } catch (error) {
+    next(error);
   }
 });
 

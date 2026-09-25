@@ -5,14 +5,17 @@
 // =====================================================================
 
 import { Router } from 'express';
+import { isAvailable } from '../services/pythonService.js';
 
 const router = Router();
 
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   res.json({
     ok: true,
     service: 'vision-ai-backend',
     uptimeSeconds: Math.round(process.uptime()),
+    // Tells the UI which features are usable right now.
+    detectionAvailable: await isAvailable(),
     timestamp: new Date().toISOString(),
   });
 });

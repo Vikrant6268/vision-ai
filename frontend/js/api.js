@@ -35,6 +35,14 @@ export function checkHealth() {
   return request('/health');
 }
 
+export function detectObjects(imageDataUrl, language) {
+  return request('/vision/detect', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ image: imageDataUrl, language }),
+  });
+}
+
 export function describeScene(imageDataUrl, language) {
   return request('/vision/describe', {
     method: 'POST',
@@ -50,10 +58,6 @@ function mockRequest(message) {
   return new Promise((resolve) => {
     setTimeout(() => resolve({ ok: true, message }), MOCK_DELAY_MS);
   });
-}
-
-export function detectObjects() {
-  return mockRequest('I can see a person and a chair in front of you.');
 }
 
 export function readText() {

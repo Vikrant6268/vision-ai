@@ -54,8 +54,9 @@ async function ensureCamera() {
 // Features
 // ---------------------------------------------------------------------
 
-// Take a photo and ask the AI what it shows.
-async function describeScene() {
+// Take a photo and send it to a feature that needs one.
+// Both "describe" (Gemini) and "detect" (YOLO) work this way.
+async function withPhoto(apiCall) {
   if (busy) return;
   busy = true;
 
@@ -64,7 +65,7 @@ async function describeScene() {
 
     setStatus(t('processing'));
     const photo = camera.capture();
-    const result = await api.describeScene(photo, getLanguage());
+    const result = await apiCall(photo, getLanguage());
     await respond(result.message);
   } catch (error) {
     console.error(error);
@@ -106,9 +107,9 @@ async function toggleCamera() {
 // ---------------------------------------------------------------------
 const actions = {
   camera:   toggleCamera,
-  describe: describeScene,
+  describe: () => withPhoto(api.describeScene),
   read:     () => runFeature(api.readText),
-  detect:   () => runFeature(api.detectObjects),
+  detect:   () => withPhoto(api.detectObjects),
   person:   () => runFeature(api.recognizePerson),
   repeat:   () => respond(speech.getLastSpoken() || t('nothingToRepeat')),
   stop:     () => { speech.stop(); setStatus(t('ready')); },
