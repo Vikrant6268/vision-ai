@@ -19,7 +19,7 @@ function userError(message, status) {
   return error;
 }
 
-async function callPython(path, body, timeoutMs = TIMEOUT_MS) {
+async function callPython(path, body, timeoutMs = TIMEOUT_MS, feature = 'Object detection') {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -34,7 +34,7 @@ async function callPython(path, body, timeoutMs = TIMEOUT_MS) {
   } catch (cause) {
     console.error('[python] unreachable:', cause.name);
     throw userError(
-      'Object detection is not available right now. Please try describing the scene instead.',
+      `${feature} is not available right now. Please try describing the scene instead.`,
       503,
     );
   } finally {
@@ -45,7 +45,7 @@ async function callPython(path, body, timeoutMs = TIMEOUT_MS) {
 
   if (!response.ok) {
     console.error('[python]', response.status, data?.detail || '');
-    throw userError('Object detection failed. Please try again.', 502);
+    throw userError(`${feature} failed. Please try again.`, 502);
   }
 
   return data;
@@ -53,6 +53,12 @@ async function callPython(path, body, timeoutMs = TIMEOUT_MS) {
 
 export function detectObjects(base64Image, confidence = 0.45) {
   return callPython('/detect', { image: base64Image, confidence });
+}
+
+// OCR gets a longer timeout: the first call downloads and loads the
+// language model, which can take a minute.
+export function readText(base64Image, language) {
+  return callPython('/ocr', { image: base64Image, language }, 90000, 'Text reading');
 }
 
 // Used by the health endpoint so the UI can report what's available.

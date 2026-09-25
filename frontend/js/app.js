@@ -123,7 +123,7 @@ const actions = {
   camera:   toggleCamera,
   walk:     toggleWalk,
   describe: () => withPhoto(api.describeScene),
-  read:     () => runFeature(api.readText),
+  read:     () => withPhoto(api.readText),
   detect:   () => withPhoto(api.detectObjects),
   person:   () => runFeature(api.recognizePerson),
   repeat:   () => respond(speech.getLastSpoken() || t('nothingToRepeat')),

@@ -168,6 +168,35 @@ export function buildAlert(objects, lang = 'en', viewBlocked = false) {
   };
 }
 
+// Spoken wrappers for the OCR result.
+const READING = {
+  en: { prefix: 'The text says:',
+        unreadable: 'I could not read the text clearly. Please hold the camera closer and steady.' },
+  hi: { prefix: 'लिखा है:',
+        unreadable: 'मैं लिखा हुआ साफ़ नहीं पढ़ पाया। कृपया कैमरा पास और स्थिर रखें।' },
+  mr: { prefix: 'यावर लिहिले आहे:',
+        unreadable: 'मला मजकूर स्पष्ट वाचता आला नाही. कृपया कॅमेरा जवळ आणि स्थिर धरा.' },
+  gu: { prefix: 'લખ્યું છે:',
+        unreadable: 'હું લખાણ સ્પષ્ટ વાંચી શક્યો નહીં. કૃપા કરીને કૅમેરા નજીક અને સ્થિર રાખો.' },
+};
+
+// Below this the reading is probably wrong, and reading nonsense aloud
+// to someone who cannot check it is worse than admitting failure.
+const MIN_READ_CONFIDENCE = 0.45;
+
+/**
+ * Turn an OCR result into something worth speaking.
+ */
+export function describeText({ text, confidence }, lang = 'en') {
+  const phrases = READING[lang] ?? READING.en;
+
+  if (!text || confidence < MIN_READ_CONFIDENCE) {
+    return { message: phrases.unreadable, read: false };
+  }
+
+  return { message: `${phrases.prefix} ${text}`, read: true, confidence };
+}
+
 /**
  * Build the spoken sentence for a set of detections.
  *

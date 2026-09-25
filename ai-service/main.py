@@ -15,8 +15,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from routes import detection
-from services import yolo_service
+from routes import detection, ocr
+from services import ocr_service, yolo_service
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -28,6 +28,10 @@ async def lifespan(app: FastAPI):
     # user does not wait several seconds extra.
     logger.info("Loading YOLO model...")
     yolo_service.load_model()
+
+    # OCR models are large, so they load on FIRST USE rather than at
+    # startup - most sessions never ask to read text.
+    ocr_service.configure(use_gpu=yolo_service.get_device() == "cuda")
     yield
     logger.info("Shutting down.")
 
@@ -39,6 +43,7 @@ app = FastAPI(
 )
 
 app.include_router(detection.router)
+app.include_router(ocr.router)
 
 
 @app.get("/health")

@@ -42,6 +42,14 @@ export function checkHealth() {
   return request('/health');
 }
 
+export function readText(imageDataUrl, language) {
+  return request('/ocr', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ image: imageDataUrl, language }),
+  });
+}
+
 export function detectObjects(imageDataUrl, language, timeoutMs = 0) {
   return request('/vision/detect', {
     method: 'POST',
@@ -65,10 +73,6 @@ function mockRequest(message) {
   return new Promise((resolve) => {
     setTimeout(() => resolve({ ok: true, message }), MOCK_DELAY_MS);
   });
-}
-
-export function readText() {
-  return mockRequest('The text says: Welcome to Vision AI.');
 }
 
 export function recognizePerson() {

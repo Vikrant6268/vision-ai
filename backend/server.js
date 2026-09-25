@@ -17,6 +17,7 @@ import { config } from './config/env.js';
 import healthRouter from './routes/health.js';
 import visionRouter from './routes/vision.js';
 import speechRouter from './routes/speech.js';
+import ocrRouter from './routes/ocr.js';
 import { notFound, errorHandler } from './middleware/errorHandler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -36,6 +37,7 @@ app.use(express.static(frontendDir));
 app.use('/api/health', healthRouter);
 app.use('/api/vision', visionRouter);
 app.use('/api/speech', speechRouter);
+app.use('/api/ocr', ocrRouter);
 
 // ---------- Errors (must be last) ----------
 app.use(notFound);
