@@ -1,0 +1,203 @@
+/* =====================================================================
+   Vision AI – main stylesheet
+   Layout, colours and typography. Accessibility-specific rules live in
+   accessibility.css so they are easy to find and explain.
+   ===================================================================== */
+
+/* ---------- Design tokens ----------
+   Dark, high-contrast theme by default: many low-vision users find
+   light text on a dark background easier to read (less glare).
+   Yellow on black gives a contrast ratio of ~19:1 (WCAG AAA needs 7:1). */
+:root {
+  --bg:         #000000;
+  --surface:    #161616;
+  --border:     #4a4a4a;
+  --text:       #ffffff;
+  --text-muted: #c8c8c8;
+  --accent:     #ffd60a;   /* microphone button */
+  --on-accent:  #000000;
+  --focus:      #00e5ff;   /* keyboard focus ring */
+  --stop:       #ff5c5c;
+  --radius:     18px;
+  --gap:        1rem;
+}
+
+/* Light theme for users who prefer it (follows the OS setting). */
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg:         #ffffff;
+    --surface:    #f3f3f3;
+    --border:     #5a5a5a;
+    --text:       #000000;
+    --text-muted: #333333;
+    --accent:     #0b3d91;
+    --on-accent:  #ffffff;
+    --focus:      #ff6a00;
+    --stop:       #b00020;
+  }
+}
+
+/* ---------- Base ---------- */
+* { box-sizing: border-box; }
+
+html { font-size: 112.5%; }   /* 18px base – larger than the browser default */
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+}
+
+/* ---------- Header ---------- */
+.app-header {
+  padding: 1rem;
+  text-align: center;
+  border-bottom: 2px solid var(--border);
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 1.75rem;
+  letter-spacing: 0.5px;
+}
+
+/* ---------- Main layout ---------- */
+.app-main {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* ---------- Status ---------- */
+.status-section { text-align: center; }
+
+#status {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  min-height: 2.25rem;   /* reserve space so the layout doesn't jump */
+}
+
+/* ---------- Microphone button ---------- */
+.mic-section {
+  display: flex;
+  justify-content: center;
+}
+
+.mic-btn {
+  width: 11rem;
+  height: 11rem;
+  border-radius: 50%;
+  border: 4px solid var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+}
+
+.mic-icon { font-size: 3.5rem; line-height: 1; }
+.mic-text { font-size: 1.1rem; }
+
+.mic-btn:hover  { filter: brightness(1.1); }
+.mic-btn:active { transform: scale(0.97); }
+
+/* ---------- Camera preview ---------- */
+.camera-section {
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  aspect-ratio: 4 / 3;
+  max-height: 50vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.camera-view {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.camera-placeholder {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+}
+
+.camera-placeholder span {
+  display: block;
+  font-size: 3rem;
+}
+
+.camera-placeholder p { margin: 0.25rem 0 0; }
+
+/* ---------- Action buttons ---------- */
+.actions {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);   /* phones: 2 columns */
+  gap: var(--gap);
+}
+
+@media (min-width: 720px) {
+  .actions { grid-template-columns: repeat(4, 1fr); }   /* tablets/desktop: 4 */
+}
+
+.action-btn {
+  min-height: 5rem;
+  padding: 0.75rem;
+  border-radius: var(--radius);
+  border: 3px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+}
+
+.action-btn .icon { font-size: 1.75rem; line-height: 1; }
+
+.action-btn:hover  { border-color: var(--accent); }
+.action-btn:active { transform: scale(0.97); }
+
+.action-btn.stop { border-color: var(--stop); }
+
+/* ---------- Last response ---------- */
+.response-section {
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+}
+
+.response-section h2 {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+#response {
+  margin: 0;
+  font-size: 1.25rem;
+  min-height: 1.9rem;
+}

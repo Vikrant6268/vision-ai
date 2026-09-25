@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#000000">
+  <title>Vision AI – Smart Assistant</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/accessibility.css">
+</head>
+<body>
+
+  <!-- Lets keyboard / screen-reader users jump straight to the controls -->
+  <a href="#main" class="skip-link">Skip to main content</a>
+
+  <header class="app-header">
+    <h1>Vision AI</h1>
+  </header>
+
+  <main id="main" class="app-main">
+
+    <!-- STATUS: aria-live makes screen readers announce every change -->
+    <section class="status-section" aria-label="Status">
+      <p id="status" role="status" aria-live="polite">Ready</p>
+    </section>
+
+    <!-- PRIMARY CONTROL: the microphone -->
+    <section class="mic-section">
+      <button id="btn-mic" class="mic-btn" type="button"
+              aria-label="Tap to speak. You can also press the space bar.">
+        <span class="mic-icon" aria-hidden="true">🎤</span>
+        <span class="mic-text">Tap to Speak</span>
+      </button>
+    </section>
+
+    <!-- CAMERA PREVIEW (connected in Phase 6) -->
+    <section class="camera-section" aria-label="Camera preview">
+      <video id="camera" class="camera-view" autoplay playsinline muted hidden></video>
+      <div id="camera-placeholder" class="camera-placeholder">
+        <span aria-hidden="true">📷</span>
+        <p>Camera is off</p>
+      </div>
+    </section>
+
+    <!-- ACTION BUTTONS: every feature is also reachable without voice -->
+    <section class="actions" aria-label="Actions">
+      <button class="action-btn" type="button" data-action="camera">
+        <span class="icon" aria-hidden="true">📷</span>Camera
+      </button>
+      <button class="action-btn" type="button" data-action="read">
+        <span class="icon" aria-hidden="true">📄</span>Read Text
+      </button>
+      <button class="action-btn" type="button" data-action="detect">
+        <span class="icon" aria-hidden="true">🔍</span>Detect Objects
+      </button>
+      <button class="action-btn" type="button" data-action="describe">
+        <span class="icon" aria-hidden="true">🌆</span>Describe Scene
+      </button>
+      <button class="action-btn" type="button" data-action="person">
+        <span class="icon" aria-hidden="true">👤</span>Who Is This
+      </button>
+      <button class="action-btn" type="button" data-action="repeat">
+        <span class="icon" aria-hidden="true">🔁</span>Repeat
+      </button>
+      <button class="action-btn stop" type="button" data-action="stop">
+        <span class="icon" aria-hidden="true">⏹</span>Stop
+      </button>
+      <button class="action-btn" type="button" data-action="help">
+        <span class="icon" aria-hidden="true">❓</span>Help
+      </button>
+    </section>
+
+    <!-- LAST RESPONSE: shown on screen for sighted helpers / low-vision users -->
+    <section class="response-section" aria-label="Last response">
+      <h2>Last response</h2>
+      <p id="response" aria-live="polite"></p>
+    </section>
+
+  </main>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

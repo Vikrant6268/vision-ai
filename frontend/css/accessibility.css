@@ -1,0 +1,65 @@
+/* =====================================================================
+   Vision AI – accessibility rules
+   Kept in one file so every accessibility decision is easy to find.
+   ===================================================================== */
+
+/* Keyboard focus must be obvious. Thick ring, high-contrast colour,
+   offset so it is visible even against a same-colour border. */
+:focus-visible {
+  outline: 4px solid var(--focus);
+  outline-offset: 3px;
+}
+
+/* Skip link: invisible until a keyboard user tabs to it. */
+.skip-link {
+  position: absolute;
+  top: -100px;
+  left: 1rem;
+  padding: 0.75rem 1rem;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 700;
+  border-radius: 8px;
+  z-index: 100;
+}
+
+.skip-link:focus { top: 1rem; }
+
+/* Text for screen readers only (hidden visually, still read aloud). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* The `hidden` attribute must always win over other display rules. */
+[hidden] { display: none !important; }
+
+/* Touch targets: WCAG asks for at least 44×44 px. We use 48 px. */
+button {
+  min-width: 3rem;
+  min-height: 3rem;
+  touch-action: manipulation;          /* removes 300 ms tap delay on mobile */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Users who get motion-sick can turn animations off in their OS.
+   We respect that setting. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+}
+
+/* Windows "High Contrast" mode replaces our colours with system ones.
+   Make sure buttons still have visible edges. */
+@media (forced-colors: active) {
+  .mic-btn, .action-btn {
+    border: 3px solid ButtonText;
+  }
+}
