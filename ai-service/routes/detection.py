@@ -14,7 +14,7 @@ import numpy as np
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from services import yolo_service
+from services import proximity_service, yolo_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -61,4 +61,6 @@ def detect(request: DetectRequest):
         "count": len(objects),
         "device": yolo_service.get_device(),
         "objects": objects,
+        # Catches what YOLO cannot: something too close to recognise.
+        **proximity_service.analyse(image),
     }

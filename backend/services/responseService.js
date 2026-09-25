@@ -81,7 +81,7 @@ const PHRASES = {
 // An object filling this much of the frame, directly ahead, is close
 // enough to be worth a warning. We say WHAT and WHERE, never a
 // distance, because a single camera cannot measure distance.
-const OBSTACLE_AREA = 0.20;
+const OBSTACLE_AREA = 0.15;
 
 // Listening to more than three things at once is hard to follow.
 const MAX_SPOKEN = 3;
@@ -115,6 +115,15 @@ function article(word) {
 
 // Short, urgent phrasing for Walk Mode. A full sentence takes too long
 // to speak when someone is moving toward something.
+// Said when the view is blocked - we know something is there, but not
+// what it is, so we tell the user to stop rather than guess.
+const BLOCKED_ALERT = {
+  en: 'Stop. Something is right in front of you.',
+  hi: 'रुकिए। आपके ठीक सामने कुछ है।',
+  mr: 'थांबा. तुमच्या अगदी समोर काहीतरी आहे.',
+  gu: 'ઊભા રહો. તમારી બરાબર સામે કંઈક છે.',
+};
+
 const ALERTS = {
   en: { left: 'Careful, {obj} on your left.',    center: 'Careful, {obj} ahead.',    right: 'Careful, {obj} on your right.' },
   hi: { left: 'सावधान, बाईं ओर {obj}।',          center: 'सावधान, सामने {obj}।',      right: 'सावधान, दाईं ओर {obj}।' },
@@ -132,7 +141,13 @@ const ALERTS = {
  * Returns { alert, key } where `key` identifies the thing being warned
  * about, so the caller can avoid repeating the same warning.
  */
-export function buildAlert(objects, lang = 'en') {
+export function buildAlert(objects, lang = 'en', viewBlocked = false) {
+  // A blocked view is the most urgent case AND the one YOLO cannot see,
+  // so it is checked first and overrides any object warning.
+  if (viewBlocked) {
+    return { alert: BLOCKED_ALERT[lang] ?? BLOCKED_ALERT.en, key: 'blocked' };
+  }
+
   if (!objects || objects.length === 0) return null;
 
   // Objects directly ahead matter most; something large to the side is

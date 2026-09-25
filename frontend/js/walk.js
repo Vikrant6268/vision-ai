@@ -37,10 +37,16 @@ const REQUEST_TIMEOUT_MS = 4000;
 // Stop after repeated failures instead of retrying forever in silence.
 const MAX_FAILURES = 5;
 
+// A "blocked view" must be seen twice in a row before we announce it.
+// Swinging the camera briefly blurs the frame, and one blurred frame
+// should not sound an alarm.
+const BLOCKED_CONFIRMATIONS = 2;
+
 let running = false;
 let timer = null;
 let inFlight = false;
 let failures = 0;
+let blockedStreak = 0;
 
 // alertKey → timestamp of the last time we said it.
 const lastAnnounced = new Map();
@@ -74,6 +80,15 @@ async function checkFrame() {
 
     failures = 0;
 
+    // Require consecutive blocked frames; a single blurred frame while
+    // turning is not an obstacle.
+    blockedStreak = result.viewBlocked ? blockedStreak + 1 : 0;
+
+    const blockedConfirmed = blockedStreak >= BLOCKED_CONFIRMATIONS;
+    const isBlockedAlert = result.alertKey === 'blocked';
+
+    if (isBlockedAlert && !blockedConfirmed) return;
+
     if (result.alert && shouldAnnounce(result.alertKey)) {
       lastAnnounced.set(result.alertKey, Date.now());
       await speech.speak(result.alert);
@@ -97,6 +112,7 @@ export async function start() {
 
   running = true;
   failures = 0;
+  blockedStreak = 0;
   lastAnnounced.clear();
 
   timer = setInterval(checkFrame, INTERVAL_MS);
