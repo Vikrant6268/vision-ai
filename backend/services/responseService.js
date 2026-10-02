@@ -183,6 +183,19 @@ const READING = {
         unreadable: 'હું લખાણ સ્પષ્ટ વાંચી શક્યો નહીં. કૃપા કરીને કૅમેરા નજીક અને સ્થિર રાખો.' },
 };
 
+// Said when we give the MEANING rather than the printed words, so the
+// user always knows which of the two they are hearing.
+const TRANSLATION = {
+  en: { prefix: 'Translated, it says:',
+        unreadable: 'I could not read the text clearly. Please hold the camera closer and steady.' },
+  hi: { prefix: 'इसका अर्थ है:',
+        unreadable: 'मैं लिखा हुआ साफ़ नहीं पढ़ पाया। कृपया कैमरा पास और स्थिर रखें।' },
+  mr: { prefix: 'याचा अर्थ आहे:',
+        unreadable: 'मला मजकूर स्पष्ट वाचता आला नाही. कृपया कॅमेरा जवळ आणि स्थिर धरा.' },
+  gu: { prefix: 'આનો અર્થ છે:',
+        unreadable: 'હું લખાણ સ્પષ્ટ વાંચી શક્યો નહીં. કૃપા કરીને કૅમેરા નજીક અને સ્થિર રાખો.' },
+};
+
 // Below this the reading is probably wrong, and reading nonsense aloud
 // to someone who cannot check it is worse than admitting failure.
 const MIN_READ_CONFIDENCE = 0.45;
@@ -190,8 +203,9 @@ const MIN_READ_CONFIDENCE = 0.45;
 /**
  * Turn an OCR result into something worth speaking.
  */
-export function describeText({ text, confidence }, lang = 'en') {
-  const phrases = READING[lang] ?? READING.en;
+export function describeText({ text, confidence }, lang = 'en', translated = false) {
+  const source = translated ? TRANSLATION : READING;
+  const phrases = source[lang] ?? source.en;
 
   if (!text || confidence < MIN_READ_CONFIDENCE) {
     return { message: phrases.unreadable, read: false };

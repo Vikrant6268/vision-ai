@@ -50,6 +50,20 @@ const OCR_PROMPT = [
   'If there is no readable text, output exactly: NO_TEXT',
 ].join(' ');
 
+// Translation is a SEPARATE request from reading. Reading a medicine
+// label or a form must give the exact printed words; translating is
+// something the user asks for deliberately.
+function translatePrompt(languageCode) {
+  const language = getLanguage(languageCode);
+  return [
+    'Read all the text in this image, then translate it.',
+    'Output only the translation, with no explanation and no commentary.',
+    'Do not include the original text.',
+    'If there is no readable text, output exactly: NO_TEXT',
+    language.instruction,
+  ].join(' ');
+}
+
 // One attempt. Returns { text } on success, or { retryable, error }.
 async function attempt(base64Image, mimeType, languageCode, model, prompt = null) {
   const controller = new AbortController();
@@ -161,5 +175,11 @@ export function describeImage(base64Image, mimeType, languageCode) {
 export async function readImageText(base64Image, mimeType) {
   const text = await run(base64Image, mimeType, 'en', OCR_PROMPT);
   // Collapse the line breaks in signage into one spoken line.
+  return text === 'NO_TEXT' ? '' : text.replace(/\s+/g, ' ').trim();
+}
+
+// Read the text in an image and translate it into the user's language.
+export async function translateImageText(base64Image, mimeType, languageCode) {
+  const text = await run(base64Image, mimeType, languageCode, translatePrompt(languageCode));
   return text === 'NO_TEXT' ? '' : text.replace(/\s+/g, ' ').trim();
 }

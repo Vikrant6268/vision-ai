@@ -50,6 +50,16 @@ export function readText(imageDataUrl, language) {
   });
 }
 
+// Same endpoint, but asks for the MEANING in the user's language
+// instead of the printed words.
+export function translateText(imageDataUrl, language) {
+  return request('/ocr', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ image: imageDataUrl, language, translate: true }),
+  });
+}
+
 export function detectObjects(imageDataUrl, language, timeoutMs = 0) {
   return request('/vision/detect', {
     method: 'POST',
