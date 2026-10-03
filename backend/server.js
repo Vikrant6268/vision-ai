@@ -31,7 +31,18 @@ app.use(morgan('dev'));                              // request log: "GET /api/h
 app.use(express.json({ limit: '10mb' }));            // parse JSON bodies (images arrive as base64 later)
 
 // ---------- Static frontend ----------
-app.use(express.static(frontendDir));
+// In development the browser must never serve a cached copy of our
+// JavaScript: editing a file and seeing the OLD behaviour wastes more
+// time than the caching saves. Production keeps normal caching.
+app.use(express.static(frontendDir, {
+  etag: config.env !== 'development',
+  lastModified: config.env !== 'development',
+  setHeaders(res) {
+    if (config.env === 'development') {
+      res.setHeader('Cache-Control', 'no-store');
+    }
+  },
+}));
 
 // ---------- API routes ----------
 app.use('/api/health', healthRouter);
