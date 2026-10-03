@@ -11,6 +11,8 @@ import * as api from './api.js';
 import * as speech from './speech.js';
 import * as camera from './camera.js';
 import * as walk from './walk.js';
+import * as voice from './voice.js';
+import { match } from './commands.js';
 import { t, getLanguage, setLanguage } from './languages.js';
 
 const statusEl   = document.getElementById('status');
@@ -32,6 +34,7 @@ async function respond(text) {
   responseEl.textContent = text;
   setStatus(t('speaking'));
   await speech.speak(text);
+  voice.markSpoke();                              // ignore our own echo
   if (id === responseId) setStatus(t('ready'));   // only if nothing newer started
 }
 
@@ -147,14 +150,73 @@ walk.onChange((active) => {
   walkBtn.classList.toggle('active', active);
 });
 
-micBtn.addEventListener('click', () => {
-  setStatus(t('listening'));
-  respond('Voice commands will be connected in a later step. Please use the buttons for now.');
+// ---------------------------------------------------------------------
+// Voice commands
+// ---------------------------------------------------------------------
+
+// Run whatever the user asked for. Anything we do not recognise gets a
+// spoken reply - silence would be indistinguishable from a dead
+// microphone for someone who cannot see the screen.
+function handleCommand(transcript) {
+  const result = match(transcript);
+
+  if (!result) {
+    respond(t('notUnderstood'));
+    return;
+  }
+
+  if (result.type === 'language') {
+    setLanguage(result.code);
+    languageEl.value = result.code;
+    voice.restartForLanguage();        // recogniser language is fixed at creation
+    respond(t('languageSet'));
+    return;
+  }
+
+  actions[result.action]();
+}
+
+function toggleVoice() {
+  if (!voice.isSupported()) {
+    respond(t('voiceUnsupported'));
+    return;
+  }
+
+  if (voice.isRunning()) {
+    voice.stop();
+    respond(t('voiceOff'));
+  } else {
+    voice.start();
+    respond(t('voiceOn'));
+  }
+}
+
+voice.onResult(handleCommand);
+
+voice.onChange((active, reason) => {
+  micBtn.setAttribute('aria-pressed', String(active));
+  micBtn.classList.toggle('listening', active);
+
+  if (active) {
+    setStatus(t('listening'));
+  } else if (reason === 'denied') {
+    respond(t('micDenied'));
+  } else {
+    setStatus(t('ready'));
+  }
 });
+
+// Show what was heard, which helps when testing with a sighted helper.
+voice.onTranscript((text) => {
+  responseEl.textContent = `"${text}"`;
+});
+
+micBtn.addEventListener('click', toggleVoice);
 
 languageEl.value = getLanguage();
 languageEl.addEventListener('change', () => {
   setLanguage(languageEl.value);
+  voice.restartForLanguage();    // listen in the new language too
   setStatus(t('ready'));
   respond(t('languageSet'));     // spoken confirmation in the NEW language
 });
@@ -174,7 +236,7 @@ document.addEventListener('keydown', (event) => {
 });
 
 // Stop the camera when the tab is closed, so the webcam light goes off.
-window.addEventListener('pagehide', () => { walk.stop(); camera.stop(); });
+window.addEventListener('pagehide', () => { voice.stop(); walk.stop(); camera.stop(); });
 
 // ---------------------------------------------------------------------
 // Startup: confirm the backend is reachable. If it isn't, say so on the

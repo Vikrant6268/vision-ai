@@ -41,25 +41,12 @@ function userError(message, status) {
   return error;
 }
 
-// Turn text into spoken audio. Returns a base64 WAV string.
-export async function synthesize(text) {
-  if (!config.geminiApiKey || config.geminiApiKey === 'your_key_here') {
-    throw userError('Speech is not set up on this server.', 503);
-  }
-
-  const clean = String(text || '').trim().slice(0, MAX_TEXT_LENGTH);
-  if (!clean) throw userError('There was nothing to speak.', 400);
-
-  if (quotaRemaining() <= 0) {
-    throw userError('The daily speech limit has been reached.', 429);
-  }
-
+async function callModel(model, clean) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
-  let response;
   try {
-    response = await fetch(`${GEMINI_URL}/${config.ttsModel}:generateContent`, {
+    const response = await fetch(`${GEMINI_URL}/${model}:generateContent`, {
       method: 'POST',
       signal: controller.signal,
       headers: {
@@ -76,23 +63,47 @@ export async function synthesize(text) {
         },
       }),
     });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      console.error('[tts]', model, response.status, data?.error?.message || '');
+      return null;
+    }
+
+    const part = data?.candidates?.[0]?.content?.parts?.[0]?.inlineData;
+    return part?.data ? { audioBase64: part.data, mimeType: part.mimeType || 'audio/wav' } : null;
   } catch (cause) {
-    console.error('[tts] request failed:', cause.name);
-    throw userError('The speech service did not respond.', 504);
+    console.error('[tts]', model, 'request failed:', cause.name);
+    return null;
   } finally {
     clearTimeout(timer);
   }
+}
 
-  const data = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    console.error('[tts]', response.status, data?.error?.message || '');
-    throw userError('The speech service is busy. Please try again.', 503);
+// Turn text into spoken audio. Returns a base64 WAV string.
+export async function synthesize(text) {
+  if (!config.geminiApiKey || config.geminiApiKey === 'your_key_here') {
+    throw userError('Speech is not set up on this server.', 503);
   }
 
-  const part = data?.candidates?.[0]?.content?.parts?.[0]?.inlineData;
-  if (!part?.data) throw userError('The speech service returned no audio.', 502);
+  const clean = String(text || '').trim().slice(0, MAX_TEXT_LENGTH);
+  if (!clean) throw userError('There was nothing to speak.', 400);
 
-  usage.count += 1;     // only count successful calls
-  return { audioBase64: part.data, mimeType: part.mimeType || 'audio/wav' };
+  if (quotaRemaining() <= 0) {
+    throw userError('The daily speech limit has been reached.', 429);
+  }
+
+  // Free-tier quota is per MODEL, so one exhausted model must not take
+  // speech down with it. Try the next one instead.
+  for (const model of [config.ttsModel, config.ttsFallbackModel]) {
+    const result = await callModel(model, clean);
+
+    if (result) {
+      usage.count += 1;     // only count successful calls
+      return result;
+    }
+  }
+
+  throw userError('The speech service is busy. Please try again.', 503);
 }

@@ -26,6 +26,11 @@ export const UI = {
     languageSet: 'Language set to English.',
     walkOn: 'Walk mode on. I will warn you about obstacles ahead. This is an aid, so please stay careful.',
     walkOff: 'Walk mode off.',
+    voiceOn: 'I am listening. Say help to hear the commands.',
+    voiceOff: 'Voice commands off.',
+    notUnderstood: 'Sorry, I did not understand. Say help to hear the commands.',
+    micDenied: 'I need permission to use the microphone. Please allow it and try again.',
+    voiceUnsupported: 'This browser cannot listen for voice commands. Please use Chrome, or use the buttons.',
   },
   hi: {
     speechTag: 'hi-IN',
@@ -44,6 +49,11 @@ export const UI = {
     languageSet: 'भाषा हिंदी कर दी गई है।',
     walkOn: 'चलने का मोड चालू। मैं सामने की रुकावटों के बारे में बताऊँगा। यह केवल सहायता है, कृपया सावधान रहें।',
     walkOff: 'चलने का मोड बंद।',
+    voiceOn: 'मैं सुन रहा हूँ। आदेश सुनने के लिए मदद कहें।',
+    voiceOff: 'आवाज़ आदेश बंद।',
+    notUnderstood: 'माफ़ कीजिए, मैं समझ नहीं पाया। आदेश सुनने के लिए मदद कहें।',
+    micDenied: 'मुझे माइक्रोफ़ोन की अनुमति चाहिए। कृपया अनुमति दें।',
+    voiceUnsupported: 'यह ब्राउज़र आवाज़ नहीं सुन सकता। कृपया Chrome का उपयोग करें, या बटन दबाएँ।',
   },
   mr: {
     speechTag: 'mr-IN',
@@ -62,6 +72,11 @@ export const UI = {
     languageSet: 'भाषा मराठी केली आहे.',
     walkOn: 'चालण्याचा मोड सुरू. मी समोरच्या अडथळ्यांबद्दल सांगेन. ही फक्त मदत आहे, कृपया सावध राहा.',
     walkOff: 'चालण्याचा मोड बंद.',
+    voiceOn: 'मी ऐकत आहे. आज्ञा ऐकण्यासाठी मदत म्हणा.',
+    voiceOff: 'आवाज आज्ञा बंद.',
+    notUnderstood: 'माफ करा, मला समजले नाही. आज्ञा ऐकण्यासाठी मदत म्हणा.',
+    micDenied: 'मला मायक्रोफोनची परवानगी हवी आहे. कृपया परवानगी द्या.',
+    voiceUnsupported: 'हा ब्राउझर आवाज ऐकू शकत नाही. कृपया Chrome वापरा, किंवा बटणे वापरा.',
   },
   gu: {
     speechTag: 'gu-IN',
@@ -80,6 +95,11 @@ export const UI = {
     languageSet: 'ભાષા ગુજરાતી કરવામાં આવી છે.',
     walkOn: 'ચાલવાનો મોડ ચાલુ. હું સામેના અવરોધો વિશે જણાવીશ. આ માત્ર મદદ છે, કૃપા કરીને સાવધ રહો.',
     walkOff: 'ચાલવાનો મોડ બંધ.',
+    voiceOn: 'હું સાંભળી રહ્યો છું. આદેશો સાંભળવા મદદ કહો.',
+    voiceOff: 'અવાજ આદેશો બંધ.',
+    notUnderstood: 'માફ કરશો, હું સમજ્યો નહીં. આદેશો સાંભળવા મદદ કહો.',
+    micDenied: 'મને માઇક્રોફોનની પરવાનગી જોઈએ છે. કૃપા કરીને પરવાનગી આપો.',
+    voiceUnsupported: 'આ બ્રાઉઝર અવાજ સાંભળી શકતું નથી. કૃપા કરીને Chrome વાપરો, અથવા બટનો વાપરો.',
   },
 };
 

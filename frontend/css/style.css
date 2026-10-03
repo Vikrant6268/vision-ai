@@ -237,3 +237,9 @@ body {
   color: var(--on-accent);
   border-color: var(--accent);
 }
+
+/* Microphone while listening. Shown by a ring as well as colour, so it
+   does not depend on colour alone. */
+.mic-btn.listening {
+  box-shadow: 0 0 0 6px var(--focus);
+}
