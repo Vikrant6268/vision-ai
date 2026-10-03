@@ -89,15 +89,6 @@ const COMMANDS = [
     ],
   },
   {
-    action: 'person',
-    words: [
-      'who is this', 'who is that', 'recognise', 'recognize', 'person',
-      'कौन है',
-      'कोण आहे',
-      'કોણ છે',
-    ],
-  },
-  {
     action: 'camera',
     words: [
       'camera on', 'camera off', 'turn on camera', 'turn off camera',

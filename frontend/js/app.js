@@ -129,7 +129,6 @@ const actions = {
   read:      () => withPhoto(api.readText),
   translate: () => withPhoto(api.translateText),
   detect:   () => withPhoto(api.detectObjects),
-  person:   () => runFeature(api.recognizePerson),
   repeat:   () => respond(speech.getLastSpoken() || t('nothingToRepeat')),
   stop:     () => { walk.stop(); speech.stop(); setStatus(t('ready')); },
   help:     () => respond(t('help')),

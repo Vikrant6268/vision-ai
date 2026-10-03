@@ -2,7 +2,7 @@
 main.py - Vision AI Python service.
 
 Handles the computer-vision work that Python does better than Node:
-YOLO object detection now, OCR and face recognition later.
+YOLO object detection, obstacle proximity checks, and offline OCR.
 
   Node.js  --HTTP-->  this service  -->  YOLO / OpenCV
 

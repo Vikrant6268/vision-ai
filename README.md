@@ -1,8 +1,9 @@
 # Vision AI - Smart Assistant for Visually Impaired People
 
 A voice-first AI assistant that helps visually impaired users understand their
-surroundings using object detection, text reading (OCR), face recognition and
-AI scene description - with support for English, Hindi, Marathi and Gujarati.
+surroundings using object detection, obstacle warnings, text reading (OCR),
+translation and AI scene description - with voice control in English, Hindi,
+Marathi and Gujarati.
 
 > Status: under development. Full documentation will be completed in Phase 19.
 
@@ -10,7 +11,7 @@ AI scene description - with support for English, Hindi, Marathi and Gujarati.
 
 - **Frontend** - HTML, CSS, vanilla JavaScript
 - **Backend** - Node.js + Express (main application logic)
-- **AI Service** - Python + FastAPI (YOLO, EasyOCR, OpenCV, face recognition)
+- **AI Service** - Python + FastAPI (YOLO, EasyOCR, OpenCV)
 - **Database** - SQLite
 - **Vision LLM** - Google Gemini (scene description only)
 

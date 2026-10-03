@@ -75,16 +75,3 @@ export function describeScene(imageDataUrl, language) {
     body: JSON.stringify({ image: imageDataUrl, language }),
   });
 }
-
-// ---------- MOCK (replaced in later phases) ----------
-const MOCK_DELAY_MS = 800;
-
-function mockRequest(message) {
-  return new Promise((resolve) => {
-    setTimeout(() => resolve({ ok: true, message }), MOCK_DELAY_MS);
-  });
-}
-
-export function recognizePerson() {
-  return mockRequest('I do not recognize this person yet.');
-}
