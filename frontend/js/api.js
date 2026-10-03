@@ -4,9 +4,6 @@
 // `request()` wraps fetch() and turns every failure into a plain-English
 // Error message, because app.js will SPEAK whatever error it receives.
 // A blind user must never hear "TypeError: Failed to fetch".
-//
-// Feature functions marked MOCK still return fake data; each is replaced
-// with a real request() call in its own phase.
 // =====================================================================
 
 const API_BASE = '/api';

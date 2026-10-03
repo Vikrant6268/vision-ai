@@ -79,24 +79,6 @@ async function withPhoto(apiCall) {
   }
 }
 
-// Shared runner for the features that are still mocked.
-async function runFeature(apiCall) {
-  if (busy) return;
-  busy = true;
-  setStatus(t('processing'));
-
-  try {
-    const result = await apiCall();
-    await respond(result.message);
-  } catch (error) {
-    console.error(error);
-    await respond(error.message);
-  } finally {
-    busy = false;
-  }
-}
-
-// Walk Mode needs the camera running continuously.
 async function toggleWalk() {
   if (walk.isRunning()) {
     await walk.stop();
@@ -123,15 +105,15 @@ async function toggleCamera() {
 // data-action attribute in index.html.
 // ---------------------------------------------------------------------
 const actions = {
-  camera:   toggleCamera,
-  walk:     toggleWalk,
-  describe: () => withPhoto(api.describeScene),
+  camera:    toggleCamera,
+  walk:      toggleWalk,
+  describe:  () => withPhoto(api.describeScene),
   read:      () => withPhoto(api.readText),
   translate: () => withPhoto(api.translateText),
-  detect:   () => withPhoto(api.detectObjects),
-  repeat:   () => respond(speech.getLastSpoken() || t('nothingToRepeat')),
-  stop:     () => { walk.stop(); speech.stop(); setStatus(t('ready')); },
-  help:     () => respond(t('help')),
+  detect:    () => withPhoto(api.detectObjects),
+  repeat:    () => respond(speech.getLastSpoken() || t('nothingToRepeat')),
+  stop:      () => { walk.stop(); speech.stop(); setStatus(t('ready')); },
+  help:      () => respond(t('help')),
 };
 
 // ---------------------------------------------------------------------
