@@ -75,7 +75,7 @@ router.post('/detect', async (req, res, next) => {
     const { message, warning } = describeDetections(result.objects, languageCode);
 
     // Walk Mode needs a short urgent phrase instead of a full sentence.
-    const alert = buildAlert(result.objects, languageCode, result.viewBlocked);
+    const alert = buildAlert(result.objects, languageCode, result.viewBlocked, result.tooDark);
 
     res.json({
       ok: true,
@@ -86,6 +86,7 @@ router.post('/detect', async (req, res, next) => {
       count: result.count,
       device: result.device,
       viewBlocked: result.viewBlocked,
+      tooDark: result.tooDark,
       objects: result.objects,   // raw data, useful for debugging and the viva
     });
   } catch (error) {

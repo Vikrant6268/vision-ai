@@ -127,6 +127,15 @@ const BLOCKED_ALERT = {
   gu: 'ઊભા રહો. તમારી બરાબર સામે કંઈક છે.',
 };
 
+// Said when the camera cannot see at all. Telling the user the real
+// problem lets them fix it; a vague warning does not.
+const TOO_DARK_ALERT = {
+  en: 'It is too dark to see. Please turn on a light.',
+  hi: 'देखने के लिए बहुत अंधेरा है। कृपया रोशनी चालू करें।',
+  mr: 'पाहण्यासाठी खूप अंधार आहे. कृपया दिवा लावा.',
+  gu: 'જોવા માટે ખૂબ અંધારું છે. કૃપા કરીને લાઇટ ચાલુ કરો.',
+};
+
 const ALERTS = {
   en: { left: 'Careful, {obj} on your left.',    center: 'Careful, {obj} ahead.',    right: 'Careful, {obj} on your right.' },
   hi: { left: 'सावधान, बाईं ओर {obj}।',          center: 'सावधान, सामने {obj}।',      right: 'सावधान, दाईं ओर {obj}।' },
@@ -144,9 +153,15 @@ const ALERTS = {
  * Returns { alert, key } where `key` identifies the thing being warned
  * about, so the caller can avoid repeating the same warning.
  */
-export function buildAlert(objects, lang = 'en', viewBlocked = false) {
+export function buildAlert(objects, lang = 'en', viewBlocked = false, tooDark = false) {
+  // Darkness first: if the camera cannot see, no other warning we give
+  // would be trustworthy.
+  if (tooDark) {
+    return { alert: TOO_DARK_ALERT[lang] ?? TOO_DARK_ALERT.en, key: 'dark' };
+  }
+
   // A blocked view is the most urgent case AND the one YOLO cannot see,
-  // so it is checked first and overrides any object warning.
+  // so it is checked next and overrides any object warning.
   if (viewBlocked) {
     return { alert: BLOCKED_ALERT[lang] ?? BLOCKED_ALERT.en, key: 'blocked' };
   }
