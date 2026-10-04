@@ -11,8 +11,13 @@ export const config = {
   port:         Number(process.env.PORT) || 3000,
   pythonAiUrl:  process.env.PYTHON_AI_URL || 'http://127.0.0.1:8000',
   geminiApiKey: process.env.GEMINI_API_KEY || '',
-  geminiModel:  process.env.GEMINI_MODEL || 'gemini-flash-lite-latest',
-  geminiFallbackModel: process.env.GEMINI_FALLBACK_MODEL || 'gemini-3.5-flash-lite',
+  // Tried in order. Each must be a DIFFERENT model: the free tier allows
+  // 15 requests a minute PER MODEL, so three models give three times the
+  // room. (An alias such as "gemini-flash-lite-latest" is the same model
+  // as the one it points to, and shares its quota.)
+  geminiModels: (process.env.GEMINI_MODELS
+    || 'gemini-3.5-flash-lite,gemini-3.1-flash-lite,gemini-3.6-flash')
+    .split(',').map((m) => m.trim()).filter(Boolean),
   ttsModel:     process.env.TTS_MODEL || 'gemini-3.8-flash-lite-tts',
   ttsFallbackModel: process.env.TTS_FALLBACK_MODEL || 'gemini-3.1-flash-tts-preview',
   ttsVoice:     process.env.TTS_VOICE || 'Kore',

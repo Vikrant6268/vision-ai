@@ -1,8 +1,7 @@
 // =====================================================================
 // voice.js - listening to the user.
 //
-// Uses the browser's built-in Web Speech API: free, no API key, and
-// no audio leaves the machine except to the browser's own recogniser.
+// Uses the browser's built-in Web Speech API: free, no API key.
 //
 // Designed for CONTINUOUS use. Once started it keeps listening and
 // restarts itself whenever the browser stops it, which Chrome does
@@ -10,15 +9,24 @@
 // that restart loop a user who cannot see the screen would have no way
 // to know the microphone had quietly died.
 //
-// Two rules that matter more than the recognition itself:
+// THE MICROPHONE IS OFF WHILE THE APP IS SPEAKING.
 //
-//   1. We IGNORE everything heard while the app is speaking, otherwise
-//      it hears its own voice and triggers itself in a loop.
-//   2. An unrecognised phrase gets a short spoken reply, never silence.
-//      Silence is indistinguishable from a broken microphone.
+// The first version kept listening and tried to ignore whatever arrived
+// while we were talking. That failed: Chrome delivers a transcript a
+// second or more after the words were spoken, so the app's own voice
+// arrived as a "command", matched nothing, and the app replied "Sorry,
+// say help" - which it then heard too, and replied to again. In use the
+// app kept asking for "help" and missed what the user actually said.
+//
+// Now recognition is paused the moment speech starts and resumed a
+// moment after it ends, so the microphone never hears the app at all.
+//
+// Two more filters keep stray sounds out:
+//   - very short results (a cough, a click) are ignored
+//   - results the recogniser itself is unsure about are ignored
 // =====================================================================
 
-import { speechTag, t } from './languages.js';
+import { speechTag } from './languages.js';
 import * as speech from './speech.js';
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -26,14 +34,23 @@ const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecogni
 // Chrome stops recognition on its own; restart after a short gap.
 const RESTART_DELAY_MS = 300;
 
-// Ignore anything heard within this long after we finish speaking, to
-// avoid picking up the tail of our own audio.
-const SELF_ECHO_GUARD_MS = 400;
+// After we stop speaking, wait this long before listening again, so the
+// tail of our own audio (and its echo in the room) is not picked up.
+const RESUME_DELAY_MS = 700;
+
+// Shorter than this many letters is noise, not a command.
+const MIN_LETTERS = 2;
+
+// Chrome scores each result from 0 to 1. Below this it is usually a
+// mis-hearing. (Some versions always report 0, meaning "unknown"; those
+// results are kept.)
+const MIN_CONFIDENCE = 0.4;
 
 let recognition = null;
-let running = false;
+let running = false;      // the user wants voice commands on
+let paused = false;       // temporarily off while the app speaks
 let restartTimer = null;
-let lastSpokeAt = 0;
+let resumeTimer = null;
 
 let onCommand = () => {};
 let onStateChange = () => {};
@@ -60,6 +77,10 @@ export function onTranscript(callback) {
   onHeard = callback;
 }
 
+function letterCount(text) {
+  return (text.match(/\p{L}/gu) || []).length;
+}
+
 function build() {
   const instance = new SpeechRecognition();
 
@@ -69,17 +90,20 @@ function build() {
   instance.maxAlternatives = 1;
 
   instance.onresult = (event) => {
-    // Our own speech can reach the microphone; ignore it.
-    if (speech.isSpeaking() || Date.now() - lastSpokeAt < SELF_ECHO_GUARD_MS) return;
+    // Belt and braces: nothing heard while we are speaking is a command.
+    if (paused || speech.isSpeaking()) return;
 
     const result = event.results[event.results.length - 1];
     if (!result.isFinal) return;
 
-    const transcript = result[0].transcript.trim();
-    if (!transcript) return;
+    const { transcript, confidence } = result[0];
+    const text = transcript.trim();
 
-    onHeard(transcript);
-    onCommand(transcript);
+    if (letterCount(text) < MIN_LETTERS) return;
+    if (confidence > 0 && confidence < MIN_CONFIDENCE) return;
+
+    onHeard(text);
+    onCommand(text);
   };
 
   instance.onerror = (event) => {
@@ -89,44 +113,65 @@ function build() {
       onStateChange(false, 'denied');
       return;
     }
-    console.warn('Speech recognition error:', event.error);
+    if (event.error !== 'no-speech' && event.error !== 'aborted') {
+      console.warn('Speech recognition error:', event.error);
+    }
   };
 
   // Chrome ends recognition regularly. Start it again so listening
-  // really is continuous.
+  // really is continuous - unless we paused it on purpose.
   instance.onend = () => {
-    if (!running) return;
+    if (!running || paused) return;
     clearTimeout(restartTimer);
-    restartTimer = setTimeout(() => {
-      try {
-        instance.start();
-      } catch {
-        // Already starting - harmless.
-      }
-    }, RESTART_DELAY_MS);
+    restartTimer = setTimeout(listen, RESTART_DELAY_MS);
   };
 
   return instance;
 }
+
+function listen() {
+  if (!running || paused || !recognition) return;
+  try {
+    recognition.start();
+  } catch {
+    // Already started - harmless.
+  }
+}
+
+// Switch the microphone off while the app talks, back on afterwards.
+speech.onSpeakingChange((speaking) => {
+  if (!running) return;
+
+  clearTimeout(resumeTimer);
+
+  if (speaking) {
+    paused = true;
+    clearTimeout(restartTimer);
+    try { recognition?.abort(); } catch { /* already stopped */ }
+  } else {
+    resumeTimer = setTimeout(() => {
+      paused = false;
+      listen();
+    }, RESUME_DELAY_MS);
+  }
+});
 
 export function start() {
   if (!isSupported() || running) return;
 
   recognition = build();
   running = true;
+  paused = speech.isSpeaking();   // if we are mid-sentence, wait for it to end
 
-  try {
-    recognition.start();
-    onStateChange(true);
-  } catch {
-    running = false;
-    onStateChange(false, 'failed');
-  }
+  if (!paused) listen();
+  onStateChange(true);
 }
 
 export function stop() {
   running = false;
+  paused = false;
   clearTimeout(restartTimer);
+  clearTimeout(resumeTimer);
 
   if (recognition) {
     recognition.onend = null;      // don't let the restart loop fire
@@ -143,9 +188,4 @@ export function restartForLanguage() {
   if (!running) return;
   stop();
   start();
-}
-
-// Called by app.js whenever we finish speaking, to set the echo guard.
-export function markSpoke() {
-  lastSpokeAt = Date.now();
 }

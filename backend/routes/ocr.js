@@ -1,35 +1,36 @@
 // =====================================================================
 // POST /api/ocr - read the text in a photo, in the user's language.
 //
-// ONE feature, not two: whatever language the page is in, the user
-// hears it in the language they selected. If the page is already in
-// that language they hear the printed words; if not, they hear a
-// translation. The spoken prefix says which, so nobody mistakes a
-// translation for the original wording:
+// Whatever language the page is in, the user hears it in the language
+// they selected. Four steps, each doing one job:
 //
-//   same language    "यावर लिहिले आहे: ..."   (it is written here)
-//   translated       "याचा अर्थ आहे: ..."     (its meaning is)
+//   1. READ        the exact printed words
+//                  Gemini first; EasyOCR offline if Gemini is unavailable
+//   2. DETECT      which language those words are in
+//                  (languageDetect.js - worked out by us, not the AI)
+//   3. TRANSLATE   only if that is not the user's language
+//   4. CHECK       the translation really is in the user's language
+//                  (inside translateText)
 //
-// TWO engines, tried in order:
+// Why separate steps: the first version asked the AI to "read and
+// translate" in one go. On a real camera photo that sometimes returned
+// the English untouched, and when the AI was slow the app fell back to
+// offline OCR - which cannot translate - without saying so. Now the
+// app itself decides whether translation is needed, and translation
+// happens even when the text was read offline.
 //
-//   1. Gemini    - accurate on Indian scripts, reads Gujarati, and is
-//                  the only one that can translate. Needs internet.
-//   2. EasyOCR   - local and offline. Reads only; it cannot translate.
+// The spoken prefix always tells the listener what they are hearing:
 //
-// Gemini goes first because of what we measured on the same Marathi
-// sign:
-//
-//   EasyOCR   "परवेशद्वार पुणे सटेशन"     conjuncts broken
-//   Gemini    "प्रवेशद्वार पुणे स्टेशन"     exact
-//
-// Reading text back WRONG is worse than useless here: the person
-// listening cannot check it against the page.
+//   same language    "यावर लिहिले आहे: ..."         the printed words
+//   translated       "याचा अर्थ आहे: ..."           a translation
+//   couldn't         "भाषांतर करता आले नाही ..."    printed words, NOT translated
 // =====================================================================
 
 import { Router } from 'express';
-import { readImageText } from '../services/aiService.js';
+import { readImageText, translateText } from '../services/aiService.js';
 import { readText as readTextLocally } from '../services/pythonService.js';
 import { describeText } from '../services/responseService.js';
+import { detectLanguage, isInLanguage } from '../services/languageDetect.js';
 import { isSupported, DEFAULT_LANGUAGE } from '../config/languages.js';
 
 const router = Router();
@@ -37,6 +38,19 @@ const router = Router();
 function parseDataUrl(dataUrl) {
   const match = /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/.exec(dataUrl || '');
   return match ? { mimeType: match[1], base64: match[2] } : null;
+}
+
+// Step 1. Returns { text, confidence, engine }.
+async function readPage(parsed, languageCode) {
+  try {
+    const text = await readImageText(parsed.base64, parsed.mimeType);
+    // Gemini gives no confidence score: an answer is either text or none.
+    return { text, confidence: text ? 0.95 : 0, engine: 'gemini' };
+  } catch (error) {
+    console.warn('[ocr] Gemini could not read the page, using offline OCR:', error.message);
+    const local = await readTextLocally(parsed.base64, languageCode);
+    return { ...local, engine: 'easyocr' };
+  }
 }
 
 router.post('/', async (req, res, next) => {
@@ -52,26 +66,30 @@ router.post('/', async (req, res, next) => {
 
     const languageCode = isSupported(language) ? language : DEFAULT_LANGUAGE;
 
-    let result;
-    let translated = false;
-    let engine = 'gemini';
+    // 1. READ
+    const page = await readPage(parsed, languageCode);
 
-    try {
-      const read = await readImageText(parsed.base64, parsed.mimeType, languageCode);
-      translated = read.translated;
+    // 2. DETECT
+    const pageLanguage = page.text ? detectLanguage(page.text) : null;
 
-      // Gemini gives no confidence score. It either returns the text or
-      // says there was none, so treat a non-empty answer as confident.
-      result = { text: read.text, confidence: read.text ? 0.95 : 0 };
-    } catch (geminiError) {
-      console.warn('[ocr] Gemini unavailable, using offline OCR:', geminiError.message);
+    // 3 + 4. TRANSLATE and CHECK - only when the page is not already
+    // something the user can understand.
+    let spokenText = page.text;
+    let mode = 'same';
 
-      // Offline we can still read, just not translate.
-      engine = 'easyocr';
-      result = await readTextLocally(parsed.base64, languageCode);
+    if (page.text && !isInLanguage(page.text, languageCode)) {
+      try {
+        spokenText = await translateText(page.text, languageCode);
+        mode = 'translated';
+      } catch (error) {
+        console.warn('[ocr] translation failed:', error.message);
+        mode = 'untranslated';
+      }
     }
 
-    const spoken = describeText(result, languageCode, translated);
+    console.log(`[ocr] engine=${page.engine} page=${pageLanguage} user=${languageCode} → ${mode}`);
+
+    const spoken = describeText({ text: spokenText, confidence: page.confidence }, languageCode, mode);
 
     res.json({
       ok: true,
@@ -79,8 +97,10 @@ router.post('/', async (req, res, next) => {
       segments: spoken.segments,
       read: spoken.read,
       confidence: spoken.confidence,
-      translated,
-      engine,
+      translated: mode === 'translated',
+      mode,
+      pageLanguage,
+      engine: page.engine,
     });
   } catch (error) {
     next(error);

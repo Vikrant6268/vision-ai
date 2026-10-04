@@ -38,7 +38,10 @@ say `YOLO loaded`, then open Chrome at <http://localhost:3000>.
 | C3 | Say **"what is in front of me"** / **"समोर काय आहे"** | Detects objects and speaks the result | |
 | C4 | Say **"read this"** / **"हे वाच"** at some text | Reads it aloud | |
 | C5 | Say **"stop"** / **"थांबा"** while it talks | Stops speaking | |
-| C6 | Say something unrelated | Hears *"Sorry, I did not understand…"* — never silence | |
+| C6 | Say something unrelated | Hears a short *"Sorry, I did not catch that"* — never silence | |
+| C6b | Keep talking nonsense for 20 s | Replies at most once every ~8 s, not to every phrase. After 3 misses it adds *"Say help…"* | |
+| C6c | Ask for **help**, and while the list is being read, say nothing | When it finishes, it does **NOT** react to its own voice (no "help", no "stop", no "sorry") | |
+| C6d | Right after any answer finishes, say a command | It hears you first time (the mic is back on within a second) | |
 | C7 | Say **"speak in English"** | Switches language and confirms in English | |
 | C8 | Stay silent for 60 s, then speak | Still responds — the recogniser restarted itself | |
 | C9 | Click the microphone again | Hears *"Voice commands off."*, ring disappears | |

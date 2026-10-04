@@ -231,14 +231,20 @@ const READING = {
 // Said when we give the MEANING rather than the printed words, so the
 // user always knows which of the two they are hearing.
 const TRANSLATION = {
-  en: { prefix: 'Translated, it says:',
-        unreadable: 'I could not read the text clearly. Please hold the camera closer and steady.' },
-  hi: { prefix: 'इसका अर्थ है:',
-        unreadable: 'मैं लिखा हुआ साफ़ नहीं पढ़ पाया। कृपया कैमरा पास और स्थिर रखें।' },
-  mr: { prefix: 'याचा अर्थ आहे:',
-        unreadable: 'मला मजकूर स्पष्ट वाचता आला नाही. कृपया कॅमेरा जवळ आणि स्थिर धरा.' },
-  gu: { prefix: 'આનો અર્થ છે:',
-        unreadable: 'હું લખાણ સ્પષ્ટ વાંચી શક્યો નહીં. કૃપા કરીને કૅમેરા નજીક અને સ્થિર રાખો.' },
+  en: { prefix: 'Translated, it says:' },
+  hi: { prefix: 'इसका अर्थ है:' },
+  mr: { prefix: 'याचा अर्थ आहे:' },
+  gu: { prefix: 'આનો અર્થ છે:' },
+};
+
+// Said when the page needed translating but translation failed (no
+// internet, or the AI service is down). The listener still hears the
+// text, but is told plainly that it is NOT in their language.
+const UNTRANSLATED = {
+  en: { prefix: 'I could not translate this. As printed, it says:' },
+  hi: { prefix: 'अनुवाद नहीं हो सका। जैसा लिखा है:' },
+  mr: { prefix: 'भाषांतर करता आले नाही. जसे लिहिले आहे:' },
+  gu: { prefix: 'ભાષાંતર થઈ શક્યું નહીં. જેમ લખ્યું છે:' },
 };
 
 // Below this the reading is probably wrong, and reading nonsense aloud
@@ -248,13 +254,18 @@ const MIN_READ_CONFIDENCE = 0.45;
 /**
  * Turn an OCR result into something worth speaking.
  */
-export function describeText({ text, confidence }, lang = 'en', translated = false) {
-  const source = translated ? TRANSLATION : READING;
-  const phrases = source[lang] ?? source.en;
+export function describeText({ text, confidence }, lang = 'en', mode = 'same') {
+  // 'same'         the page is in the user's language: the printed words
+  // 'translated'   the page was translated into the user's language
+  // 'untranslated' it needed translating, but translation failed
+  const reading = READING[lang] ?? READING.en;
 
   if (!text || confidence < MIN_READ_CONFIDENCE) {
-    return { message: phrases.unreadable, segments: [phrases.unreadable], read: false };
+    return { message: reading.unreadable, segments: [reading.unreadable], read: false };
   }
+
+  const prefixes = { same: READING, translated: TRANSLATION, untranslated: UNTRANSLATED };
+  const phrases = (prefixes[mode] ?? READING)[lang] ?? READING.en;
 
   // The prefix is its own segment: it is a fixed phrase, already cached,
   // so the listener hears it at once while the text itself is generated.
@@ -331,6 +342,7 @@ export function speechPhrases(lang) {
     READING[lang].prefix,
     READING[lang].unreadable,
     TRANSLATION[lang].prefix,
+    UNTRANSLATED[lang].prefix,
   ];
 
   for (const label of Object.keys(OBJECTS)) {

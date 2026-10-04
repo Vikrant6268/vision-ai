@@ -38,7 +38,6 @@ async function respond(text, segments = null) {
   responseEl.textContent = text;
   setStatus(t('speaking'));
   await speech.speak(segments ?? text);
-  voice.markSpoke();                              // ignore our own echo
   if (id === responseId) setStatus(t('ready'));   // only if nothing newer started
 }
 
@@ -145,16 +144,36 @@ function warmSpeech() {
   speech.warm(uiPhrases(getLanguage()));
 }
 
-// Run whatever the user asked for. Anything we do not recognise gets a
-// spoken reply - silence would be indistinguishable from a dead
-// microphone for someone who cannot see the screen.
+// Something was heard but matched no command. We must reply - silence
+// would be indistinguishable from a dead microphone for someone who
+// cannot see the screen - but not to EVERY stray phrase: background
+// talk or a TV can produce a stream of them, and answering each one
+// would drown out the user. So: a short reply, at most once every few
+// seconds, and the hint about "help" only after several misses in a row.
+const MISS_REPLY_GAP_MS = 8000;
+const MISSES_BEFORE_HINT = 3;
+let lastMissReplyAt = 0;
+let missesInARow = 0;
+
+function notUnderstood() {
+  missesInARow += 1;
+
+  if (Date.now() - lastMissReplyAt < MISS_REPLY_GAP_MS) return;
+  lastMissReplyAt = Date.now();
+
+  respond(t(missesInARow >= MISSES_BEFORE_HINT ? 'notUnderstoodHelp' : 'notUnderstood'));
+}
+
+// Run whatever the user asked for.
 function handleCommand(transcript) {
   const result = match(transcript);
 
   if (!result) {
-    respond(t('notUnderstood'));
+    notUnderstood();
     return;
   }
+
+  missesInARow = 0;
 
   if (result.type === 'language') {
     setLanguage(result.code);

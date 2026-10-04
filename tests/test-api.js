@@ -212,6 +212,22 @@ async function testReadInUserLanguage() {
       && translated.data.segments[0].length < 40,
     JSON.stringify(translated.data.segments));
 
+  // A realistic book page, not just a short sign. This is the case that
+  // came back in English during manual testing.
+  for (const lang of ['mr', 'hi', 'gu']) {
+    const page = await read('page_en.jpg', lang);
+    const latin = (page.data.message?.match(/[a-zA-Z]/g) || []).length;
+    check(`Full English page is translated into ${lang}`,
+      page.data.mode === 'translated' && inScript(page.data.message, lang) && latin < 10,
+      `mode=${page.data.mode} latin=${latin}`);
+  }
+
+  // The label must describe what really happened, not what the AI claimed.
+  check('The app, not the AI, reports the page language',
+    translated.data.pageLanguage === 'en', translated.data.pageLanguage);
+  check('Same-language reading is labelled as the printed text',
+    sameMr.data.mode === 'same', sameMr.data.mode);
+
   // The old separate Translate flag is gone; sending it changes nothing.
   const flagged = await post('/api/ocr',
     { image: imageUrl('sign_en.jpg'), language: 'mr', translate: true });

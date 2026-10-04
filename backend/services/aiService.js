@@ -10,9 +10,11 @@
 
 import { config } from '../config/env.js';
 import { getLanguage } from '../config/languages.js';
+import { isInLanguage } from './languageDetect.js';
 
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 const TIMEOUT_MS = 10000;
+const READ_TIMEOUT_MS = 20000;      // a full page of text takes longer
 const RETRY_DELAY_MS = 800;
 
 // Errors whose message is safe to SPEAK to the user carry `expose = true`
@@ -25,6 +27,17 @@ function userError(message, status) {
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// When Google says a model is over its quota it also says when to come
+// back ("Please retry in 57s"). Until then that model is skipped, so the
+// user does not wait for a request we already know will be refused.
+const restingUntil = new Map();
+
+function retryDelayMs(data) {
+  const info = (data?.error?.details || []).find((d) => d.retryDelay);
+  const seconds = parseFloat(info?.retryDelay ?? '');
+  return Number.isFinite(seconds) ? seconds * 1000 : 60000;
+}
 
 // Build the instruction we send with the photo.
 // Short answers matter: the user LISTENS to this, and a long paragraph
@@ -41,61 +54,38 @@ function buildPrompt(languageCode) {
   ].join(' ');
 }
 
-// Reading text in the user's language: one request does both jobs.
-//
-// The model returns the page's own language alongside the text. That is
-// how the app can tell the listener whether they are hearing the printed
-// words or a translation, which matters for anything where wording is
-// important - a medicine label, a form, a ticket.
-//
-// Numbers, units, names and codes are kept exactly as printed: a dose of
-// "500 mg" must never be reworded.
-function readPrompt(languageCode, strict = false) {
+// Step 1 of Read Text: copy the words exactly. Translation is a
+// separate step (see translateText), so each prompt does one job and the
+// app - not the model - decides whether translation is needed.
+const OCR_PROMPT = [
+  'Read all the text in this image exactly as printed.',
+  'Output only the text itself, with no explanation and no translation.',
+  'Preserve the original script and spelling.',
+  'If there is no readable text, output exactly: NO_TEXT',
+].join(' ');
+
+function translatePrompt(text, languageCode, strict) {
   const target = getLanguage(languageCode);
-
-  return [
-    'Read all the text in this image.',
-    'In "language", give the ISO 639-1 code of the language the text is written in',
-    '(for example en, hi, mr, gu), or "other" if it is none of those.',
-    `In "text", give the text in ${target.name}.`,
-    `If it is already in ${target.name}, copy it exactly as printed, keeping spelling and script.`,
-    `Otherwise translate EVERY word into ${target.name}.`,
-    'Only numbers, units, personal names, brand names and product codes stay as printed.',
+  const instructions = [
+    `Translate the following text into ${target.name}.`,
+    'Translate every word. Only numbers, units, personal names, brand names and',
+    'product codes stay exactly as written.',
     target.instruction,
-    strict ? 'Your last answer left the text untranslated. Translate it fully this time.' : '',
-    'Output only the text, with no explanation or commentary.',
-    'If there is no readable text, return an empty string for "text".',
+    strict && 'Your previous answer was not fully translated. Translate all of it this time.',
+    'Output only the translation, with no explanation and no commentary.',
   ].filter(Boolean).join(' ');
+
+  return `${instructions}\n\nText:\n${text}`;
 }
-
-// Has the answer really been put into the language we asked for?
-// The model sometimes reports "translated" but returns the original
-// words. Telling a listener "this is a translation" and then reading
-// them the untranslated text would be worse than being straightforward.
-const SCRIPT_OF = {
-  hi: /[\u0900-\u097F]/,
-  mr: /[\u0900-\u097F]/,
-  gu: /[\u0A80-\u0AFF]/,
-};
-
-function isInTargetLanguage(text, languageCode) {
-  if (languageCode === 'en') return !/[\u0900-\u0DFF]/.test(text);   // no Indian script left
-  return SCRIPT_OF[languageCode].test(text);
-}
-
-const READ_SCHEMA = {
-  type: 'OBJECT',
-  properties: {
-    language: { type: 'STRING' },
-    text: { type: 'STRING' },
-  },
-  required: ['language', 'text'],
-};
 
 // One attempt. Returns { text } on success, or { retryable, error }.
-async function attempt(base64Image, mimeType, languageCode, model, prompt = null, generationConfig = null) {
+async function attempt(base64Image, mimeType, languageCode, model, prompt = null, timeoutMs = TIMEOUT_MS) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  // Text-only requests (translation) send no image.
+  const parts = [{ text: prompt ?? buildPrompt(languageCode) }];
+  if (base64Image) parts.push({ inline_data: { mime_type: mimeType, data: base64Image } });
 
   let response;
   try {
@@ -107,13 +97,7 @@ async function attempt(base64Image, mimeType, languageCode, model, prompt = null
         'x-goog-api-key': config.geminiApiKey,
       },
       body: JSON.stringify({
-        contents: [{
-          parts: [
-            { text: prompt ?? buildPrompt(languageCode) },
-            { inline_data: { mime_type: mimeType, data: base64Image } },
-          ],
-        }],
-        ...(generationConfig && { generationConfig }),
+        contents: [{ parts }],
       }),
     });
   } catch (cause) {
@@ -137,8 +121,18 @@ async function attempt(base64Image, mimeType, languageCode, model, prompt = null
   if (!response.ok) {
     console.error('[gemini]', response.status, data?.error?.message || '');
 
-    // 429 = our quota; 500/503 = Google is overloaded. Both worth retrying.
-    if (response.status === 429 || response.status >= 500) {
+    // 429 = this model's quota is used up; rest it, try the next model.
+    if (response.status === 429) {
+      restingUntil.set(model, Date.now() + retryDelayMs(data));
+      return {
+        retryable: true,
+        error: userError('The AI service is busy. Please try again in a moment.', 503),
+      };
+    }
+
+    // 404 = this model has been retired. 500/503 = Google is overloaded.
+    // Either way another model may well answer.
+    if (response.status === 404 || response.status >= 500) {
       return {
         retryable: true,
         error: userError('The AI service is busy. Please try again in a moment.', 503),
@@ -168,20 +162,23 @@ async function attempt(base64Image, mimeType, languageCode, model, prompt = null
   return { text };
 }
 
-async function run(base64Image, mimeType, languageCode, prompt, generationConfig = null) {
+async function run(base64Image, mimeType, languageCode, prompt, timeoutMs = TIMEOUT_MS) {
   if (!config.geminiApiKey || config.geminiApiKey === 'your_key_here') {
     throw userError('Scene description is not set up on this server.', 503);
   }
 
-  // Try the fast model first; if Google reports it overloaded, fall back
-  // to a second model rather than making the user wait and retry.
+  // Try each model in turn, skipping any Google has told us to rest.
   // A user who cannot see the screen should not have to guess that
   // pressing the button again would have worked.
-  const plan = [config.geminiModel, config.geminiFallbackModel];
+  const now = Date.now();
+  const ready = config.geminiModels.filter((m) => (restingUntil.get(m) ?? 0) <= now);
+
+  // If every model is resting, try them anyway rather than give up.
+  const plan = ready.length ? ready : config.geminiModels;
   let last;
 
   for (let i = 0; i < plan.length; i++) {
-    last = await attempt(base64Image, mimeType, languageCode, plan[i], prompt, generationConfig);
+    last = await attempt(base64Image, mimeType, languageCode, plan[i], prompt, timeoutMs);
 
     if (last.text) return last.text;
     if (!last.retryable) break;
@@ -199,49 +196,33 @@ export function describeImage(base64Image, mimeType, languageCode) {
   return run(base64Image, mimeType, languageCode, null);
 }
 
+// Collapse the line breaks in signage and pages into one spoken line.
+const oneLine = (text) => String(text || '').replace(/\s+/g, ' ').trim();
+
 /**
- * Read the text in an image, in the user's language.
- *
- * Returns { text, translated }:
- *   text        the words to speak ('' when there was nothing to read)
- *   translated  true when the page was in a different language
+ * Step 1 of Read Text: the exact printed words, or '' if there are none.
  */
-export async function readImageText(base64Image, mimeType, languageCode) {
-  const ask = async (strict) => {
-    const raw = await run(base64Image, mimeType, languageCode, readPrompt(languageCode, strict), {
-      responseMimeType: 'application/json',
-      responseSchema: READ_SCHEMA,
-    });
+export async function readImageText(base64Image, mimeType) {
+  const text = await run(base64Image, mimeType, 'en', OCR_PROMPT, READ_TIMEOUT_MS);
+  return text === 'NO_TEXT' ? '' : oneLine(text);
+}
 
-    try {
-      const parsed = JSON.parse(raw);
-      return {
-        // Collapse the line breaks in signage into one spoken line.
-        text: String(parsed.text || '').replace(/\s+/g, ' ').trim(),
-        source: String(parsed.language || '').toLowerCase(),
-      };
-    } catch {
-      // The model ignored the format. Better to speak what it said than to fail.
-      console.warn('[gemini] read result was not JSON');
-      return { text: raw.replace(/\s+/g, ' ').trim(), source: languageCode };
-    }
-  };
+/**
+ * Step 3 of Read Text: translate already-extracted text.
+ *
+ * Text only, no image, so it is quick and cheap. The result is checked
+ * (step 4); a translation that is still in the wrong language is asked
+ * for once more, and if it fails again we throw rather than pass off the
+ * original as a translation.
+ */
+export async function translateText(text, languageCode) {
+  for (const strict of [false, true]) {
+    const result = oneLine(await run(null, null, languageCode, translatePrompt(text, languageCode, strict)));
 
-  let result = await ask(false);
+    if (result && isInLanguage(result, languageCode)) return result;
 
-  const wasTranslated = () => result.text !== '' && result.source !== languageCode;
-
-  // Claimed to translate but did not: ask once more, more firmly.
-  if (wasTranslated() && !isInTargetLanguage(result.text, languageCode)) {
-    console.warn('[gemini] translation came back untranslated, retrying');
-    result = await ask(true);
+    console.warn(`[gemini] translation into ${languageCode} came back in the wrong language`);
   }
 
-  // Still not translated: say so honestly. The listener hears it as the
-  // printed text, not as a translation.
-  if (wasTranslated() && !isInTargetLanguage(result.text, languageCode)) {
-    return { text: result.text, translated: false };
-  }
-
-  return { text: result.text, translated: wasTranslated() };
+  throw userError('I could not translate this text.', 502);
 }

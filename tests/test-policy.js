@@ -13,6 +13,7 @@
 
 import { createAlertPolicy } from '../frontend/js/alertPolicy.js';
 import { splitText, FIRST_PIECE, NEXT_PIECE } from '../frontend/js/textSplit.js';
+import { detectLanguage, isInLanguage } from '../backend/services/languageDetect.js';
 
 let passed = 0;
 let failed = 0;
@@ -144,6 +145,39 @@ console.log('--------------------------------');
 {
   check('Empty text gives no pieces', splitText('').length === 0 && splitText('   ').length === 0);
   check('Devanagari danda ends a sentence', splitText('पहिले वाक्य। दुसरे वाक्य।').join('|').includes('वाक्य।'));
+}
+
+// ---------------------------------------------------------------------
+console.log('\nRead Text: which language is a page in?');
+console.log('---------------------------------------');
+
+{
+  const cases = [
+    ['EMERGENCY EXIT Platform 3 Keep Left', 'en'],
+    ['प्रकरण ३: जलचक्र. पृथ्वीवरील पाणी महासागर, हवा आणि जमीन यांच्यामध्ये सतत फिरत असते.', 'mr'],
+    ['अध्याय 3: जल चक्र। पृथ्वी पर पानी लगातार महासागरों, हवा और ज़मीन के बीच घूमता है।', 'hi'],
+    ['પ્રકરણ ૩: જળચક્ર. પૃથ્વી પરનું પાણી સતત ફરતું રહે છે.', 'gu'],
+    ['प्रवेशद्वार पुणे स्टेशन', 'deva'],
+    ['12345 ---', 'other'],
+  ];
+  for (const [text, expected] of cases) {
+    check(`Detects ${expected.padEnd(5)} "${text.slice(0, 28)}"`, detectLanguage(text) === expected,
+      `got ${detectLanguage(text)}`);
+  }
+
+  check('A Marathi translation with "Platform 3" left in is still Marathi',
+    detectLanguage('आपत्कालीन बाहेर पडण्याचा मार्ग Platform 3 डावीकडे राहा') === 'mr');
+}
+
+{
+  check('English page needs translating for a Marathi user', !isInLanguage('EMERGENCY EXIT', 'mr'));
+  check('Hindi page needs translating for a Marathi user',
+    !isInLanguage('पृथ्वी पर पानी लगातार महासागरों और ज़मीन के बीच घूमता है।', 'mr'));
+  check('A short Devanagari sign is fine for a Marathi user as it is',
+    isInLanguage('प्रवेशद्वार पुणे स्टेशन', 'mr'));
+  check('...and for a Hindi user', isInLanguage('प्रवेशद्वार पुणे स्टेशन', 'hi'));
+  check('...but not for an English user', !isInLanguage('प्रवेशद्वार पुणे स्टेशन', 'en'));
+  check('Gujarati text is not accepted as Marathi', !isInLanguage('તમારી સામે એક ખુરશી છે.', 'mr'));
 }
 
 // ---------------------------------------------------------------------

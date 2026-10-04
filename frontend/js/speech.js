@@ -37,6 +37,19 @@ const CLIP_CACHE_LIMIT = 80;
 
 let lastSpoken = '';
 let playing = false;          // true from the start of speak() until it finishes
+const speakingListeners = [];
+
+// The voice recogniser listens to this so it can switch the microphone
+// off while we talk. Otherwise it hears our own voice as a command.
+export function onSpeakingChange(callback) {
+  speakingListeners.push(callback);
+}
+
+function setPlaying(value) {
+  if (playing === value) return;
+  playing = value;
+  speakingListeners.forEach((callback) => callback(value));
+}
 let playToken = 0;            // bumped to cancel whatever is currently speaking
 let audio = null;             // the <audio> element currently playing
 let finishCurrent = null;     // resolves the piece that is playing right now
@@ -179,7 +192,7 @@ export function prepare(input) {
     async play(stillWanted = () => true) {
       const token = ++playToken;      // supersedes anything already speaking
       silence();
-      playing = true;
+      setPlaying(true);
       lastSpoken = text;
 
       try {
@@ -209,7 +222,7 @@ export function prepare(input) {
           await playClip(src);
         }
       } finally {
-        if (token === playToken) playing = false;
+        if (token === playToken) setPlaying(false);
       }
     },
   };
@@ -222,7 +235,7 @@ export function speak(input) {
 // Cancel whatever is being spoken, by either method.
 export function stop() {
   playToken += 1;
-  playing = false;
+  setPlaying(false);
   silence();
 }
 
