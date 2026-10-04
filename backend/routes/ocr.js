@@ -1,22 +1,20 @@
 // =====================================================================
-// POST /api/ocr - read the text in a photo.
+// POST /api/ocr - read the text in a photo, in the user's language.
 //
-// Two different jobs, chosen by the `translate` flag:
+// ONE feature, not two: whatever language the page is in, the user
+// hears it in the language they selected. If the page is already in
+// that language they hear the printed words; if not, they hear a
+// translation. The spoken prefix says which, so nobody mistakes a
+// translation for the original wording:
 //
-//   translate = false   read the text EXACTLY as printed
-//   translate = true    read it, then give the meaning in the user's
-//                       language
-//
-// They are deliberately separate. For a medicine label, a form or a
-// ticket the user needs the actual printed words; translating silently
-// would be unsafe. Translation is something they ask for on purpose,
-// and the spoken reply says which of the two they are hearing.
+//   same language    "यावर लिहिले आहे: ..."   (it is written here)
+//   translated       "याचा अर्थ आहे: ..."     (its meaning is)
 //
 // TWO engines, tried in order:
 //
-//   1. Gemini    - accurate on Indian scripts, and the only one of the
-//                  two that can read Gujarati at all. Needs internet.
-//   2. EasyOCR   - local and offline, used when Gemini is unreachable.
+//   1. Gemini    - accurate on Indian scripts, reads Gujarati, and is
+//                  the only one that can translate. Needs internet.
+//   2. EasyOCR   - local and offline. Reads only; it cannot translate.
 //
 // Gemini goes first because of what we measured on the same Marathi
 // sign:
@@ -29,7 +27,7 @@
 // =====================================================================
 
 import { Router } from 'express';
-import { readImageText, translateImageText } from '../services/aiService.js';
+import { readImageText } from '../services/aiService.js';
 import { readText as readTextLocally } from '../services/pythonService.js';
 import { describeText } from '../services/responseService.js';
 import { isSupported, DEFAULT_LANGUAGE } from '../config/languages.js';
@@ -43,7 +41,7 @@ function parseDataUrl(dataUrl) {
 
 router.post('/', async (req, res, next) => {
   try {
-    const { image, language, translate = false } = req.body || {};
+    const { image, language } = req.body || {};
 
     const parsed = parseDataUrl(image);
     if (!parsed) {
@@ -53,38 +51,37 @@ router.post('/', async (req, res, next) => {
     }
 
     const languageCode = isSupported(language) ? language : DEFAULT_LANGUAGE;
-    const wantsTranslation = Boolean(translate);
 
     let result;
+    let translated = false;
     let engine = 'gemini';
 
     try {
-      const text = wantsTranslation
-        ? await translateImageText(parsed.base64, parsed.mimeType, languageCode)
-        : await readImageText(parsed.base64, parsed.mimeType);
+      const read = await readImageText(parsed.base64, parsed.mimeType, languageCode);
+      translated = read.translated;
 
       // Gemini gives no confidence score. It either returns the text or
       // says there was none, so treat a non-empty answer as confident.
-      result = { text, confidence: text ? 0.95 : 0 };
+      result = { text: read.text, confidence: read.text ? 0.95 : 0 };
     } catch (geminiError) {
-      console.warn('[ocr] Gemini unavailable:', geminiError.message);
+      console.warn('[ocr] Gemini unavailable, using offline OCR:', geminiError.message);
 
-      // EasyOCR can read, but it cannot translate. Say so plainly
-      // rather than quietly reading out an untranslated sign.
-      if (wantsTranslation) {
-        const error = new Error('Translation needs an internet connection. I can still read the text out as it is printed.');
-        error.status = 503;
-        error.expose = true;
-        throw error;
-      }
-
+      // Offline we can still read, just not translate.
       engine = 'easyocr';
       result = await readTextLocally(parsed.base64, languageCode);
     }
 
-    const { message, read, confidence } = describeText(result, languageCode, wantsTranslation);
+    const spoken = describeText(result, languageCode, translated);
 
-    res.json({ ok: true, message, read, confidence, engine, translated: wantsTranslation });
+    res.json({
+      ok: true,
+      message: spoken.message,
+      segments: spoken.segments,
+      read: spoken.read,
+      confidence: spoken.confidence,
+      translated,
+      engine,
+    });
   } catch (error) {
     next(error);
   }

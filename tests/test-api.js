@@ -102,6 +102,20 @@ async function testDetection() {
       r.data.message?.slice(0, 40));
   }
 
+  // Each object is its own short sentence, so it can be fetched in
+  // parallel and the common ones are already cached.
+  const parts = await post('/api/vision/detect', { image: imageUrl('street.jpg'), language: 'en' });
+  check('Answer is split into short spoken phrases',
+    Array.isArray(parts.data.segments) && parts.data.segments.length >= 2,
+    JSON.stringify(parts.data.segments));
+  check('Each phrase is a single short sentence',
+    (parts.data.segments || []).every((p) => p.length <= 60),
+    JSON.stringify(parts.data.segments));
+  check('Plural sentences use the plural verb', /There are two people/.test(parts.data.message),
+    parts.data.message);
+  check('Answer is limited to the two most relevant things',
+    (parts.data.segments || []).filter((p) => p !== 'Careful.').length <= 2);
+
   const blank = await post('/api/vision/detect', { image: imageUrl('blank.jpg'), language: 'en' });
   check('Says so when nothing is detected', blank.status === 200 && /cannot see/i.test(blank.data.message));
 }
@@ -152,23 +166,57 @@ async function testOcr() {
   check('Admits failure instead of inventing text', blank.data.read === false);
 }
 
-async function testTranslation() {
-  section('5. Translate');
+async function testReadInUserLanguage() {
+  section('5. Read Text speaks in the user language');
 
+  const read = (file, language) => post('/api/ocr', { image: imageUrl(file), language });
+
+  // Page already in the chosen language: the printed words, unchanged.
+  const sameEn = await read('sign_en.jpg', 'en');
+  check('English page, English user: exact words',
+    /EMERGENCY EXIT/i.test(sameEn.data.message) && sameEn.data.translated === false,
+    sameEn.data.message?.slice(0, 50));
+
+  const sameMr = await read('sign_mr.jpg', 'mr');
+  check('Marathi page, Marathi user: exact words',
+    sameMr.data.message?.includes('प्रवेशद्वार') && sameMr.data.message?.includes('स्टेशन')
+      && sameMr.data.translated === false,
+    sameMr.data.message?.slice(0, 50));
+  check('...and says it is the printed text', sameMr.data.message?.startsWith('यावर लिहिले आहे'));
+
+  // Page in a DIFFERENT language: translated, whatever the page is in.
   for (const lang of ['mr', 'hi', 'gu']) {
-    const r = await post('/api/ocr', { image: imageUrl('sign_en.jpg'), language: lang, translate: true });
-    check(`Translates an English sign into ${lang}`,
+    const r = await read('sign_en.jpg', lang);
+    check(`English page, ${lang} user: translated into ${lang}`,
       r.status === 200 && inScript(r.data.message, lang) && r.data.translated === true,
+      r.data.message?.slice(0, 45));
+    check(`...no English left over in the ${lang} answer`, !/EMERGENCY EXIT/i.test(r.data.message),
       r.data.message?.slice(0, 45));
   }
 
-  const read = await post('/api/ocr', { image: imageUrl('sign_en.jpg'), language: 'mr' });
-  const translated = await post('/api/ocr', { image: imageUrl('sign_en.jpg'), language: 'mr', translate: true });
-  check('Read and Translate give different answers',
-    read.data.message !== translated.data.message);
-  check('Read keeps the English words', /EMERGENCY|Platform/i.test(read.data.message));
-  check('Translate does not keep the English words', !/EMERGENCY EXIT/i.test(translated.data.message),
-    translated.data.message?.slice(0, 45));
+  const toEn = await read('sign_mr.jpg', 'en');
+  check('Marathi page, English user: translated into English',
+    toEn.data.translated === true && /[a-zA-Z]{4}/.test(toEn.data.message)
+      && !/[\u0900-\u097F]/.test(toEn.data.message),
+    toEn.data.message?.slice(0, 60));
+
+  // The listener must be able to tell a translation from the original.
+  const translated = await read('sign_en.jpg', 'mr');
+  check('A translation is announced as a translation',
+    translated.data.message?.startsWith('याचा अर्थ आहे'), translated.data.message?.slice(0, 30));
+  check('...so it differs from the printed-text wording',
+    !translated.data.message?.startsWith('यावर लिहिले आहे'));
+
+  check('Answer carries a short prefix phrase for fast, cached speech',
+    Array.isArray(translated.data.segments) && translated.data.segments.length === 2
+      && translated.data.segments[0].length < 40,
+    JSON.stringify(translated.data.segments));
+
+  // The old separate Translate flag is gone; sending it changes nothing.
+  const flagged = await post('/api/ocr',
+    { image: imageUrl('sign_en.jpg'), language: 'mr', translate: true });
+  check('No separate translate mode any more',
+    flagged.status === 200 && flagged.data.translated === translated.data.translated);
 }
 
 async function testSceneDescription() {
@@ -182,18 +230,59 @@ async function testSceneDescription() {
 }
 
 async function testSpeech() {
-  section('7. Text to speech');
+  section('7. Text to speech (Edge neural voices)');
 
-  const usage = await get('/api/speech/usage');
-  check('Usage endpoint works', usage.status === 200);
-  console.log(`        quota used: ${usage.data.used}/${usage.data.limit}`);
+  const speak = (text, language) => post('/api/speech', { text, language });
 
-  const marathi = await post('/api/speech', { text: 'तुमच्या समोर एक खुर्ची आहे.' });
-  check('Produces Marathi audio', marathi.status === 200 && Boolean(marathi.data.audio));
-  check('Audio is a playable format', /audio\//.test(marathi.data.mimeType || ''), marathi.data.mimeType);
+  for (const [lang, text] of [
+    ['mr', 'तुमच्या समोर एक खुर्ची आहे.'],
+    ['hi', 'आपके सामने एक कुर्सी है।'],
+    ['gu', 'તમારી સામે એક ખુરશી છે.'],
+    ['en', 'There is a chair in front of you.'],
+  ]) {
+    const r = await speak(text, lang);
+    check(`Produces ${lang} audio`,
+      r.status === 200 && Boolean(r.data.audio) && /audio\//.test(r.data.mimeType || ''),
+      r.data.error);
+  }
 
-  const empty = await post('/api/speech', { text: '' });
+  // Fixed phrases are cached; the second request must be much faster.
+  const phrase = 'सावधान, समोर खुर्ची.';
+  await post('/api/speech/warm', { language: 'mr', phrases: [phrase] });
+  await speak(phrase, 'mr');
+  const again = await speak(phrase, 'mr');
+  check('A repeated fixed phrase comes from the cache', again.data.source === 'cache', again.data.source);
+  check(`...and is fast (${again.ms}ms)`, again.ms < 500, `${again.ms}ms`);
+
+  // Text the user had read aloud must NOT be stored on the server.
+  const secret = `गोपनीय चाचणी मजकूर ${Date.now()}`;
+  await speak(secret, 'mr');
+  const secretAgain = await speak(secret, 'mr');
+  check('Text that is not a fixed phrase is never cached', secretAgain.data.source === 'live',
+    secretAgain.data.source);
+
+  // The reason Read Text used to fall silent: one long text took far
+  // longer than the server would wait. Pieces must come back promptly.
+  const piece = ('येथे एक लांब मजकूर आहे जो पुस्तकाच्या पानावर छापलेला असू शकतो. ').repeat(2).trim();
+  const long = await speak(piece, 'mr');
+  check(`A paragraph-sized piece is synthesised in time (${(long.ms / 1000).toFixed(1)}s)`,
+    long.status === 200 && long.ms < 12000, `${long.ms}ms`);
+
+  const empty = await speak('', 'mr');
   check('Rejects empty text cleanly', empty.status === 400 && Boolean(empty.data.error));
+
+  const warm = await post('/api/speech/warm', { language: 'xx', phrases: [] });
+  check('Warm-up rejects an unsupported language', warm.status === 400);
+
+  const warmEn = await post('/api/speech/warm', { language: 'en', phrases: [] });
+  check('English is never pre-generated (the browser speaks it)', warmEn.data.queued === 0);
+
+  const stats = await get('/api/speech/stats');
+  check('Stats endpoint reports where speech came from',
+    stats.status === 200 && typeof stats.data.cacheHits === 'number');
+  console.log(`        edge=${stats.data.edge} cache=${stats.data.cacheHits} gemini=${stats.data.gemini} failed=${stats.data.failed}`);
+  check('Edge voices served requests without needing Gemini', stats.data.gemini === 0,
+    `gemini=${stats.data.gemini}`);
 }
 
 async function testErrorHandling() {
@@ -234,8 +323,11 @@ async function testFrontend() {
   check('Buttons have ARIA state where needed', html.includes('aria-pressed'));
   check('Status region announces changes', html.includes('aria-live'));
   check('No face recognition left', !/who is this/i.test(html));
+  check('Read and Translate are one button',
+    !html.includes('data-action="translate"') && html.includes('data-action="read"'));
 
   for (const file of ['js/app.js', 'js/voice.js', 'js/commands.js', 'js/walk.js',
+                      'js/alertPolicy.js', 'js/sound.js', 'js/textSplit.js',
                       'js/camera.js', 'js/speech.js', 'js/api.js', 'js/languages.js',
                       'css/style.css', 'css/accessibility.css']) {
     const r = await fetch(`${BASE}/${file}`);
@@ -257,7 +349,7 @@ async function main() {
     await testDetection();
     await testObstacles();
     await testOcr();
-    await testTranslation();
+    await testReadInUserLanguage();
     await testSceneDescription();
     await testSpeech();
     await testErrorHandling();

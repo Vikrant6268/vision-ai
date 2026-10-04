@@ -2,37 +2,64 @@
 // speechService.js – text-to-speech for languages the user's device
 // cannot speak itself.
 //
-// English is handled free and offline by the browser. This service is
-// used only for Hindi / Marathi / Gujarati, where Windows has no voice
-// installed.
+// English never comes here: the browser speaks it free and offline.
+// Hindi, Marathi and Gujarati come here only when the device has no
+// voice of its own. (On Android, Chrome already has them, so phones
+// skip this service entirely.)
 //
-// A daily request cap protects the free tier: if we run out, the app
-// falls back to the browser voice rather than breaking.
+// Order of attempts:
+//
+//   1. disk cache      instant. Short phrases only, see below.
+//   2. Edge voices     ~2 s, free, no quota           (edgeTts.js)
+//   3. Gemini voices   last resort, 10 requests/day    (geminiTts.js)
+//
+// WHY A CACHE: most of what the app says is a fixed phrase - "Careful,
+// chair ahead", the help text, error messages. Generating "Careful,
+// chair ahead" once and replaying the file takes about 20 ms instead of
+// 2 s, and it is what makes Walk Mode warnings feel immediate.
+//
+// Only FIXED phrases are cached - the ones the app itself says (warnings,
+// help, error messages), which it announces through warm(). Text that a
+// user had read aloud from a document is never stored: keeping a copy of
+// whatever someone scanned on the server would be a privacy problem.
 // =====================================================================
 
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+
 import { config } from '../config/env.js';
+import { isSupported } from '../config/languages.js';
+import { speechPhrases } from './responseService.js';
+import * as edge from './edgeTts.js';
+import * as gemini from './geminiTts.js';
 
-const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
-const TIMEOUT_MS = 15000;
-const MAX_TEXT_LENGTH = 600;      // roughly 30 seconds of speech
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const CACHE_DIR = path.resolve(__dirname, '..', '..', config.ttsCacheDir);
 
-// ---------- Daily usage cap ----------
-// Kept in memory: it resets when the server restarts, which is fine for
-// a safety limit. A database would be overkill here.
-let usage = { date: '', count: 0 };
+export const MAX_TEXT_LENGTH = 600;     // per request; the browser sends pieces
+const MAX_PHRASE_LENGTH = 200;          // longest fixed phrase we will warm
 
-function today() {
-  return new Date().toISOString().slice(0, 10);
+const WARM_CONCURRENCY = 3;
+const MAX_WARM_PHRASES = 400;
+
+const stats = { cacheHits: 0, edge: 0, gemini: 0, failed: 0 };
+
+// Created on first use, so the service works even if nothing called
+// ensureCacheDir() at startup.
+let dirReady = null;
+function ensureDir() {
+  dirReady ??= fs.mkdir(CACHE_DIR, { recursive: true });
+  return dirReady;
 }
 
-function quotaRemaining() {
-  if (usage.date !== today()) usage = { date: today(), count: 0 };
-  return config.ttsDailyLimit - usage.count;
-}
+// Identical requests made at the same moment share one synthesis.
+const inFlight = new Map();
 
-export function usageStats() {
-  return { used: usage.date === today() ? usage.count : 0, limit: config.ttsDailyLimit };
-}
+// Cache keys of phrases the app says itself. Only these are written to
+// disk. A phrase becomes "fixed" when warm() is told about it.
+const fixedPhrases = new Set();
 
 function userError(message, status) {
   const error = new Error(message);
@@ -41,69 +68,153 @@ function userError(message, status) {
   return error;
 }
 
-async function callModel(model, clean) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+function cacheKey(text, languageCode) {
+  return crypto
+    .createHash('sha1')
+    .update(`${edge.voiceFor(languageCode)}|${text}`)
+    .digest('hex');
+}
 
+async function readCache(key) {
   try {
-    const response = await fetch(`${GEMINI_URL}/${model}:generateContent`, {
-      method: 'POST',
-      signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': config.geminiApiKey,
-      },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: clean }] }],
-        generationConfig: {
-          responseModalities: ['AUDIO'],
-          speechConfig: {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: config.ttsVoice } },
-          },
-        },
-      }),
-    });
-
-    const data = await response.json().catch(() => ({}));
-
-    if (!response.ok) {
-      console.error('[tts]', model, response.status, data?.error?.message || '');
-      return null;
-    }
-
-    const part = data?.candidates?.[0]?.content?.parts?.[0]?.inlineData;
-    return part?.data ? { audioBase64: part.data, mimeType: part.mimeType || 'audio/wav' } : null;
-  } catch (cause) {
-    console.error('[tts]', model, 'request failed:', cause.name);
+    return await fs.readFile(path.join(CACHE_DIR, `${key}.mp3`));
+  } catch {
     return null;
-  } finally {
-    clearTimeout(timer);
   }
 }
 
-// Turn text into spoken audio. Returns a base64 WAV string.
-export async function synthesize(text) {
-  if (!config.geminiApiKey || config.geminiApiKey === 'your_key_here') {
-    throw userError('Speech is not set up on this server.', 503);
+async function writeCache(key, audio) {
+  // Write to a temporary name, then rename: a half-written file must
+  // never be served as if it were a complete clip.
+  const final = path.join(CACHE_DIR, `${key}.mp3`);
+  const temp = `${final}.${crypto.randomUUID()}.part`;
+  try {
+    await fs.writeFile(temp, audio);
+    await fs.rename(temp, final);
+  } catch (error) {
+    console.warn('[tts] could not cache clip:', error.message);
+    fs.unlink(temp).catch(() => {});
   }
+}
 
-  const clean = String(text || '').trim().slice(0, MAX_TEXT_LENGTH);
-  if (!clean) throw userError('There was nothing to speak.', 400);
-
-  if (quotaRemaining() <= 0) {
-    throw userError('The daily speech limit has been reached.', 429);
-  }
-
-  // Free-tier quota is per MODEL, so one exhausted model must not take
-  // speech down with it. Try the next one instead.
-  for (const model of [config.ttsModel, config.ttsFallbackModel]) {
-    const result = await callModel(model, clean);
-
-    if (result) {
-      usage.count += 1;     // only count successful calls
-      return result;
+async function generate(text, languageCode) {
+  // Edge twice (its connection occasionally drops), then Gemini.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const audio = await edge.synthesize(text, languageCode, CACHE_DIR);
+    if (audio) {
+      stats.edge += 1;
+      return { audio, mimeType: edge.MIME_TYPE };
     }
   }
 
-  throw userError('The speech service is busy. Please try again.', 503);
+  const fallback = await gemini.synthesize(text);
+  if (fallback) {
+    stats.gemini += 1;
+    return fallback;
+  }
+
+  stats.failed += 1;
+  return null;
+}
+
+/**
+ * Turn text into spoken audio.
+ * Returns { audio: Buffer, mimeType, source: 'cache' | 'live' }.
+ */
+export async function synthesize(text, languageCode) {
+  if (!isSupported(languageCode)) {
+    throw userError('That language is not supported for speech.', 400);
+  }
+
+  const clean = String(text || '').replace(/\s+/g, ' ').trim().slice(0, MAX_TEXT_LENGTH);
+  if (!clean) throw userError('There was nothing to speak.', 400);
+
+  const key = cacheKey(clean, languageCode);
+
+  // Reading is harmless for any text: a file only exists if it was
+  // stored as a fixed phrase earlier.
+  const cached = await readCache(key);
+  if (cached) {
+    stats.cacheHits += 1;
+    return { audio: cached, mimeType: edge.MIME_TYPE, source: 'cache' };
+  }
+
+  if (inFlight.has(key)) return inFlight.get(key);
+
+  const job = (async () => {
+    await ensureDir();
+    const result = await generate(clean, languageCode);
+    if (!result) throw userError('The speech service is busy. Please try again.', 503);
+
+    // Only fixed phrases, and only Edge clips (one format, one voice).
+    if (fixedPhrases.has(key) && result.mimeType === edge.MIME_TYPE) {
+      await writeCache(key, result.audio);
+    }
+
+    return { ...result, source: 'live' };
+  })();
+
+  inFlight.set(key, job);
+  try {
+    return await job;
+  } finally {
+    inFlight.delete(key);
+  }
+}
+
+// ---------- Warm-up ----------
+
+const warming = new Set();
+
+/**
+ * Generate the phrases the app is going to say, in the background, so
+ * the first Walk Mode warning is as fast as the hundredth.
+ *
+ * `extraPhrases` are the interface strings, which only the browser
+ * knows. The alert and detection phrases come from responseService.
+ */
+export function warm(languageCode, extraPhrases = []) {
+  if (!isSupported(languageCode) || languageCode === 'en') {
+    return { queued: 0, reason: 'not needed' };
+  }
+
+  if (warming.has(languageCode)) return { queued: 0, reason: 'already running' };
+
+  const phrases = [...new Set([...extraPhrases, ...speechPhrases(languageCode)])]
+    .map((p) => String(p).replace(/\s+/g, ' ').trim())
+    .filter((p) => p && p.length <= MAX_PHRASE_LENGTH)
+    .slice(0, MAX_WARM_PHRASES);
+
+  // From now on these exact phrases are stored when generated.
+  for (const phrase of phrases) fixedPhrases.add(cacheKey(phrase, languageCode));
+
+  warming.add(languageCode);
+
+  (async () => {
+    await ensureDir();
+
+    const queue = [...phrases];
+    let generated = 0;
+
+    const worker = async () => {
+      while (queue.length) {
+        const phrase = queue.shift();
+        try {
+          const result = await synthesize(phrase, languageCode);
+          if (result.source === 'live') generated += 1;
+        } catch {
+          // A failed phrase is simply generated on demand later.
+        }
+      }
+    };
+
+    await Promise.all(Array.from({ length: WARM_CONCURRENCY }, worker));
+    console.log(`[tts] warm-up for ${languageCode} done: ${generated} new, ${phrases.length - generated} already cached`);
+  })().finally(() => warming.delete(languageCode));
+
+  return { queued: phrases.length };
+}
+
+export function speechStats() {
+  return { ...stats, warming: [...warming] };
 }

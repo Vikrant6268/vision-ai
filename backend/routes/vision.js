@@ -72,7 +72,7 @@ router.post('/detect', async (req, res, next) => {
 
     const languageCode = isSupported(language) ? language : DEFAULT_LANGUAGE;
     const result = await detectObjects(parsed.base64);
-    const { message, warning } = describeDetections(result.objects, languageCode);
+    const { message, segments, warning } = describeDetections(result.objects, languageCode);
 
     // Walk Mode needs a short urgent phrase instead of a full sentence.
     const alert = buildAlert(result.objects, languageCode, result.viewBlocked, result.tooDark);
@@ -80,6 +80,7 @@ router.post('/detect', async (req, res, next) => {
     res.json({
       ok: true,
       message,
+      segments,
       warning,
       alert: alert?.alert ?? null,
       alertKey: alert?.key ?? null,

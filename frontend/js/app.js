@@ -13,7 +13,7 @@ import * as camera from './camera.js';
 import * as walk from './walk.js';
 import * as voice from './voice.js';
 import { match } from './commands.js';
-import { t, getLanguage, setLanguage } from './languages.js';
+import { t, getLanguage, setLanguage, uiPhrases } from './languages.js';
 
 const statusEl   = document.getElementById('status');
 const responseEl = document.getElementById('response');
@@ -29,11 +29,15 @@ function setStatus(text) {
 
 // Show text on screen AND speak it. Every user-facing message goes
 // through here, so nothing is ever visual-only.
-async function respond(text) {
+//
+// `segments` is the same message split into short phrases by the server.
+// Spoken separately, the fixed ones are already cached and the rest are
+// fetched in parallel, so the answer starts sooner.
+async function respond(text, segments = null) {
   const id = ++responseId;
   responseEl.textContent = text;
   setStatus(t('speaking'));
-  await speech.speak(text);
+  await speech.speak(segments ?? text);
   voice.markSpoke();                              // ignore our own echo
   if (id === responseId) setStatus(t('ready'));   // only if nothing newer started
 }
@@ -58,8 +62,8 @@ async function ensureCamera() {
 // Features
 // ---------------------------------------------------------------------
 
-// Take a photo and send it to a feature that needs one.
-// Both "describe" (Gemini) and "detect" (YOLO) work this way.
+// Take a photo and send it to a feature that needs one: "describe"
+// (Gemini), "detect" (YOLO) and "read" (Gemini OCR) all work this way.
 async function withPhoto(apiCall) {
   if (busy) return;
   busy = true;
@@ -70,7 +74,7 @@ async function withPhoto(apiCall) {
     setStatus(t('processing'));
     const photo = camera.capture();
     const result = await apiCall(photo, getLanguage());
-    await respond(result.message);
+    await respond(result.message, result.segments);
   } catch (error) {
     console.error(error);
     await respond(error.message);   // api.js guarantees this is speakable
@@ -109,7 +113,6 @@ const actions = {
   walk:      toggleWalk,
   describe:  () => withPhoto(api.describeScene),
   read:      () => withPhoto(api.readText),
-  translate: () => withPhoto(api.translateText),
   detect:    () => withPhoto(api.detectObjects),
   repeat:    () => respond(speech.getLastSpoken() || t('nothingToRepeat')),
   stop:      () => { walk.stop(); speech.stop(); setStatus(t('ready')); },
@@ -135,6 +138,13 @@ walk.onChange((active) => {
 // Voice commands
 // ---------------------------------------------------------------------
 
+// Ask the server to pre-generate this language's fixed phrases (warnings,
+// help, errors) in the background. Does nothing on a device that has its
+// own voice for the language.
+function warmSpeech() {
+  speech.warm(uiPhrases(getLanguage()));
+}
+
 // Run whatever the user asked for. Anything we do not recognise gets a
 // spoken reply - silence would be indistinguishable from a dead
 // microphone for someone who cannot see the screen.
@@ -150,6 +160,7 @@ function handleCommand(transcript) {
     setLanguage(result.code);
     languageEl.value = result.code;
     voice.restartForLanguage();        // recogniser language is fixed at creation
+    warmSpeech();
     respond(t('languageSet'));
     return;
   }
@@ -198,6 +209,7 @@ languageEl.value = getLanguage();
 languageEl.addEventListener('change', () => {
   setLanguage(languageEl.value);
   voice.restartForLanguage();    // listen in the new language too
+  warmSpeech();
   setStatus(t('ready'));
   respond(t('languageSet'));     // spoken confirmation in the NEW language
 });
@@ -223,6 +235,8 @@ window.addEventListener('pagehide', () => { voice.stop(); walk.stop(); camera.st
 // Startup: confirm the backend is reachable. If it isn't, say so on the
 // screen now and aloud on the first tap – never fail silently.
 // ---------------------------------------------------------------------
+warmSpeech();
+
 api.checkHealth()
   .then(() => setStatus(t('ready')))
   .catch((error) => {

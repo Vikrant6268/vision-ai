@@ -41,31 +41,59 @@ function buildPrompt(languageCode) {
   ].join(' ');
 }
 
-// Reading printed text is a different job from describing a scene, so
-// it gets its own prompt: copy exactly, invent nothing.
-const OCR_PROMPT = [
-  'Read all the text in this image exactly as printed.',
-  'Output only the text itself, with no explanation and no translation.',
-  'Preserve the original script and spelling.',
-  'If there is no readable text, output exactly: NO_TEXT',
-].join(' ');
+// Reading text in the user's language: one request does both jobs.
+//
+// The model returns the page's own language alongside the text. That is
+// how the app can tell the listener whether they are hearing the printed
+// words or a translation, which matters for anything where wording is
+// important - a medicine label, a form, a ticket.
+//
+// Numbers, units, names and codes are kept exactly as printed: a dose of
+// "500 mg" must never be reworded.
+function readPrompt(languageCode, strict = false) {
+  const target = getLanguage(languageCode);
 
-// Translation is a SEPARATE request from reading. Reading a medicine
-// label or a form must give the exact printed words; translating is
-// something the user asks for deliberately.
-function translatePrompt(languageCode) {
-  const language = getLanguage(languageCode);
   return [
-    'Read all the text in this image, then translate it.',
-    'Output only the translation, with no explanation and no commentary.',
-    'Do not include the original text.',
-    'If there is no readable text, output exactly: NO_TEXT',
-    language.instruction,
-  ].join(' ');
+    'Read all the text in this image.',
+    'In "language", give the ISO 639-1 code of the language the text is written in',
+    '(for example en, hi, mr, gu), or "other" if it is none of those.',
+    `In "text", give the text in ${target.name}.`,
+    `If it is already in ${target.name}, copy it exactly as printed, keeping spelling and script.`,
+    `Otherwise translate EVERY word into ${target.name}.`,
+    'Only numbers, units, personal names, brand names and product codes stay as printed.',
+    target.instruction,
+    strict ? 'Your last answer left the text untranslated. Translate it fully this time.' : '',
+    'Output only the text, with no explanation or commentary.',
+    'If there is no readable text, return an empty string for "text".',
+  ].filter(Boolean).join(' ');
 }
 
+// Has the answer really been put into the language we asked for?
+// The model sometimes reports "translated" but returns the original
+// words. Telling a listener "this is a translation" and then reading
+// them the untranslated text would be worse than being straightforward.
+const SCRIPT_OF = {
+  hi: /[\u0900-\u097F]/,
+  mr: /[\u0900-\u097F]/,
+  gu: /[\u0A80-\u0AFF]/,
+};
+
+function isInTargetLanguage(text, languageCode) {
+  if (languageCode === 'en') return !/[\u0900-\u0DFF]/.test(text);   // no Indian script left
+  return SCRIPT_OF[languageCode].test(text);
+}
+
+const READ_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    language: { type: 'STRING' },
+    text: { type: 'STRING' },
+  },
+  required: ['language', 'text'],
+};
+
 // One attempt. Returns { text } on success, or { retryable, error }.
-async function attempt(base64Image, mimeType, languageCode, model, prompt = null) {
+async function attempt(base64Image, mimeType, languageCode, model, prompt = null, generationConfig = null) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
@@ -85,6 +113,7 @@ async function attempt(base64Image, mimeType, languageCode, model, prompt = null
             { inline_data: { mime_type: mimeType, data: base64Image } },
           ],
         }],
+        ...(generationConfig && { generationConfig }),
       }),
     });
   } catch (cause) {
@@ -139,7 +168,7 @@ async function attempt(base64Image, mimeType, languageCode, model, prompt = null
   return { text };
 }
 
-async function run(base64Image, mimeType, languageCode, prompt) {
+async function run(base64Image, mimeType, languageCode, prompt, generationConfig = null) {
   if (!config.geminiApiKey || config.geminiApiKey === 'your_key_here') {
     throw userError('Scene description is not set up on this server.', 503);
   }
@@ -152,7 +181,7 @@ async function run(base64Image, mimeType, languageCode, prompt) {
   let last;
 
   for (let i = 0; i < plan.length; i++) {
-    last = await attempt(base64Image, mimeType, languageCode, plan[i], prompt);
+    last = await attempt(base64Image, mimeType, languageCode, plan[i], prompt, generationConfig);
 
     if (last.text) return last.text;
     if (!last.retryable) break;
@@ -170,16 +199,49 @@ export function describeImage(base64Image, mimeType, languageCode) {
   return run(base64Image, mimeType, languageCode, null);
 }
 
-// Read printed text. Returns '' when the image has no readable text,
-// so the caller can say so rather than inventing something.
-export async function readImageText(base64Image, mimeType) {
-  const text = await run(base64Image, mimeType, 'en', OCR_PROMPT);
-  // Collapse the line breaks in signage into one spoken line.
-  return text === 'NO_TEXT' ? '' : text.replace(/\s+/g, ' ').trim();
-}
+/**
+ * Read the text in an image, in the user's language.
+ *
+ * Returns { text, translated }:
+ *   text        the words to speak ('' when there was nothing to read)
+ *   translated  true when the page was in a different language
+ */
+export async function readImageText(base64Image, mimeType, languageCode) {
+  const ask = async (strict) => {
+    const raw = await run(base64Image, mimeType, languageCode, readPrompt(languageCode, strict), {
+      responseMimeType: 'application/json',
+      responseSchema: READ_SCHEMA,
+    });
 
-// Read the text in an image and translate it into the user's language.
-export async function translateImageText(base64Image, mimeType, languageCode) {
-  const text = await run(base64Image, mimeType, languageCode, translatePrompt(languageCode));
-  return text === 'NO_TEXT' ? '' : text.replace(/\s+/g, ' ').trim();
+    try {
+      const parsed = JSON.parse(raw);
+      return {
+        // Collapse the line breaks in signage into one spoken line.
+        text: String(parsed.text || '').replace(/\s+/g, ' ').trim(),
+        source: String(parsed.language || '').toLowerCase(),
+      };
+    } catch {
+      // The model ignored the format. Better to speak what it said than to fail.
+      console.warn('[gemini] read result was not JSON');
+      return { text: raw.replace(/\s+/g, ' ').trim(), source: languageCode };
+    }
+  };
+
+  let result = await ask(false);
+
+  const wasTranslated = () => result.text !== '' && result.source !== languageCode;
+
+  // Claimed to translate but did not: ask once more, more firmly.
+  if (wasTranslated() && !isInTargetLanguage(result.text, languageCode)) {
+    console.warn('[gemini] translation came back untranslated, retrying');
+    result = await ask(true);
+  }
+
+  // Still not translated: say so honestly. The listener hears it as the
+  // printed text, not as a translation.
+  if (wasTranslated() && !isInTargetLanguage(result.text, languageCode)) {
+    return { text: result.text, translated: false };
+  }
+
+  return { text: result.text, translated: wasTranslated() };
 }

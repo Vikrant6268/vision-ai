@@ -16,7 +16,7 @@ export const config = {
   ttsModel:     process.env.TTS_MODEL || 'gemini-3.8-flash-lite-tts',
   ttsFallbackModel: process.env.TTS_FALLBACK_MODEL || 'gemini-3.1-flash-tts-preview',
   ttsVoice:     process.env.TTS_VOICE || 'Kore',
-  ttsDailyLimit: Number(process.env.TTS_DAILY_LIMIT) || 200,
+  ttsCacheDir:  process.env.TTS_CACHE_DIR || 'data/tts-cache',
   dbPath:       process.env.DB_PATH || './data/vision_ai.db',
 };
 

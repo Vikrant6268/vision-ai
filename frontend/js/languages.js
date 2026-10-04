@@ -22,7 +22,7 @@ export const UI = {
     cameraMissing: 'No camera was found on this device.',
     serverDown: 'I cannot reach the server. Please make sure Vision AI is running.',
     nothingToRepeat: 'There is nothing to repeat yet.',
-    help: 'You can say: describe surroundings, read this, translate this, detect objects, walk mode, repeat, stop, or help.',
+    help: 'You can say: describe surroundings, read this, detect objects, walk mode, repeat, stop, or help.',
     languageSet: 'Language set to English.',
     walkOn: 'Walk mode on. I will warn you about obstacles ahead. This is an aid, so please stay careful.',
     walkOff: 'Walk mode off.',
@@ -45,7 +45,7 @@ export const UI = {
     cameraMissing: 'इस डिवाइस पर कैमरा नहीं मिला।',
     serverDown: 'मैं सर्वर से संपर्क नहीं कर पा रहा हूँ। कृपया देखें कि Vision AI चल रहा है।',
     nothingToRepeat: 'दोहराने के लिए अभी कुछ नहीं है।',
-    help: 'आप कह सकते हैं: आसपास बताओ, यह पढ़ो, इसका अनुवाद करो, वस्तुएँ पहचानो, चलने का मोड, दोहराओ, रुको, या मदद।',
+    help: 'आप कह सकते हैं: आसपास बताओ, यह पढ़ो, वस्तुएँ पहचानो, चलने का मोड, दोहराओ, रुको, या मदद।',
     languageSet: 'भाषा हिंदी कर दी गई है।',
     walkOn: 'चलने का मोड चालू। मैं सामने की रुकावटों के बारे में बताऊँगा। यह केवल सहायता है, कृपया सावधान रहें।',
     walkOff: 'चलने का मोड बंद।',
@@ -68,7 +68,7 @@ export const UI = {
     cameraMissing: 'या उपकरणावर कॅमेरा सापडला नाही.',
     serverDown: 'मला सर्व्हरशी संपर्क साधता येत नाही. कृपया Vision AI सुरू आहे का ते पहा.',
     nothingToRepeat: 'पुन्हा सांगण्यासारखे अजून काही नाही.',
-    help: 'तुम्ही म्हणू शकता: आजूबाजूला काय आहे, हे वाचा, याचे भाषांतर करा, वस्तू ओळखा, चालण्याचा मोड, पुन्हा सांगा, थांबा, किंवा मदत.',
+    help: 'तुम्ही म्हणू शकता: आजूबाजूला काय आहे, हे वाचा, वस्तू ओळखा, चालण्याचा मोड, पुन्हा सांगा, थांबा, किंवा मदत.',
     languageSet: 'भाषा मराठी केली आहे.',
     walkOn: 'चालण्याचा मोड सुरू. मी समोरच्या अडथळ्यांबद्दल सांगेन. ही फक्त मदत आहे, कृपया सावध राहा.',
     walkOff: 'चालण्याचा मोड बंद.',
@@ -91,7 +91,7 @@ export const UI = {
     cameraMissing: 'આ ઉપકરણ પર કૅમેરા મળ્યો નથી.',
     serverDown: 'હું સર્વર સાથે સંપર્ક કરી શકતો નથી. કૃપા કરીને Vision AI ચાલુ છે કે નહીં તે તપાસો.',
     nothingToRepeat: 'પુનરાવર્તન કરવા માટે હજી કંઈ નથી.',
-    help: 'તમે કહી શકો છો: આસપાસ શું છે, આ વાંચો, આનું ભાષાંતર કરો, વસ્તુઓ ઓળખો, ચાલવાનો મોડ, ફરીથી કહો, બંધ કરો, અથવા મદદ.',
+    help: 'તમે કહી શકો છો: આસપાસ શું છે, આ વાંચો, વસ્તુઓ ઓળખો, ચાલવાનો મોડ, ફરીથી કહો, બંધ કરો, અથવા મદદ.',
     languageSet: 'ભાષા ગુજરાતી કરવામાં આવી છે.',
     walkOn: 'ચાલવાનો મોડ ચાલુ. હું સામેના અવરોધો વિશે જણાવીશ. આ માત્ર મદદ છે, કૃપા કરીને સાવધ રહો.',
     walkOff: 'ચાલવાનો મોડ બંધ.',
@@ -132,4 +132,11 @@ export function t(key) {
 
 export function speechTag() {
   return UI[current].speechTag;
+}
+
+// Every phrase the app can speak in this language, so the server can
+// generate them ahead of time. Excludes the voice tag, which is not text.
+export function uiPhrases(code) {
+  const { speechTag: _tag, ...phrases } = UI[code] ?? {};
+  return Object.values(phrases);
 }

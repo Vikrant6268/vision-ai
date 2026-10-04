@@ -44,21 +44,15 @@ const COMMANDS = [
     ],
   },
   {
-    action: 'translate',
-    words: [
-      'translate', 'meaning', 'what does it mean', 'in marathi', 'in hindi',
-      'अनुवाद', 'मतलब', 'अर्थ',
-      'भाषांतर', 'अर्थ काय',
-      'ભાષાંતર', 'અનુવાદ', 'અર્થ',
-    ],
-  },
-  {
+    // Reading and translating are ONE command: the text is always
+    // spoken in the user's language, so "translate this" and "read
+    // this" mean the same thing here.
     action: 'read',
     words: [
-      'read', 'what does this say', 'text',
-      'पढ़', 'लिखा',
-      'वाच', 'लिहिले',
-      'વાંચ', 'લખ્યું',
+      'read', 'what does this say', 'text', 'translate', 'what does it mean',
+      'पढ़', 'लिखा', 'अनुवाद', 'मतलब',
+      'वाच', 'लिहिले', 'भाषांतर', 'अर्थ',
+      'વાંચ', 'લખ્યું', 'ભાષાંતર', 'અનુવાદ', 'અર્થ',
     ],
   },
   {

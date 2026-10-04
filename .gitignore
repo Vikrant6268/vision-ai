@@ -24,6 +24,7 @@ ai-service/models/*
 # ---------- Runtime data ----------
 data/*.db
 data/*.db-journal
+data/tts-cache/
 data/captures/*
 !data/captures/.gitkeep
 

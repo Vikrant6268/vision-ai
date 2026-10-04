@@ -13,20 +13,33 @@
 export const LANGUAGES = {
   en: {
     label: 'English',
+    name: 'English',
     // Told to Gemini so it replies directly in the target language.
     instruction: 'Reply in English.',
+    // Neural voice used by the server when the device has none.
+    voice: 'en-IN-NeerjaNeural',
+    speechLocale: 'en-IN',
   },
   hi: {
     label: 'हिंदी (Hindi)',
+    name: 'Hindi',
     instruction: 'Reply in Hindi (Devanagari script). Do not use English words.',
+    voice: 'hi-IN-SwaraNeural',
+    speechLocale: 'hi-IN',
   },
   mr: {
     label: 'मराठी (Marathi)',
+    name: 'Marathi',
     instruction: 'Reply in Marathi (Devanagari script). Do not use English or Hindi words.',
+    voice: 'mr-IN-AarohiNeural',
+    speechLocale: 'mr-IN',
   },
   gu: {
     label: 'ગુજરાતી (Gujarati)',
+    name: 'Gujarati',
     instruction: 'Reply in Gujarati script. Do not use English or Hindi words.',
+    voice: 'gu-IN-DhwaniNeural',
+    speechLocale: 'gu-IN',
   },
 };
 

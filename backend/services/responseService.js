@@ -59,22 +59,26 @@ const PHRASES = {
   en: {
     nothing: 'I cannot see anything clearly. Please move the camera slowly.',
     warning: 'Careful.',
-    verb: 'There is',
+    verbOne: 'There is',
+    verbMany: 'There are',
   },
   hi: {
     nothing: 'मुझे कुछ साफ़ नहीं दिख रहा। कृपया कैमरा धीरे घुमाएँ।',
     warning: 'सावधान।',
-    verb: 'है।',
+    verbOne: 'है।',
+    verbMany: 'हैं।',
   },
   mr: {
     nothing: 'मला काही स्पष्ट दिसत नाही. कृपया कॅमेरा हळू फिरवा.',
     warning: 'सावधान.',
-    verb: 'आहे.',
+    verbOne: 'आहे.',
+    verbMany: 'आहेत.',
   },
   gu: {
     nothing: 'મને કંઈ સ્પષ્ટ દેખાતું નથી. કૃપા કરીને કૅમેરા ધીમે ફેરવો.',
     warning: 'સાવધાન.',
-    verb: 'છે.',
+    verbOne: 'છે.',
+    verbMany: 'છે.',
   },
 };
 
@@ -86,8 +90,9 @@ const PHRASES = {
 // 0.20 arrived too late to be useful while actually walking.
 const OBSTACLE_AREA = 0.10;
 
-// Listening to more than three things at once is hard to follow.
-const MAX_SPOKEN = 3;
+// Two things is about as much as a listener can hold at once, and every
+// extra item adds seconds of speech. Describe Scene gives the full picture.
+const MAX_SPOKEN = 2;
 
 // English needs plurals ("two people"); Hindi, Marathi and Gujarati read
 // naturally with the base word after a number ("दोन व्यक्ती").
@@ -143,6 +148,34 @@ const ALERTS = {
   gu: { left: 'સાવધાન, ડાબી બાજુ {obj}.',        center: 'સાવધાન, સામે {obj}.',       right: 'સાવધાન, જમણી બાજુ {obj}.' },
 };
 
+// The text of one Walk Mode warning. Both buildAlert() and the speech
+// warm-up call this, so the phrase that gets cached is byte-for-byte the
+// phrase that gets spoken.
+function alertText(label, position, lang) {
+  const template = (ALERTS[lang] ?? ALERTS.en)[position];
+  return template.replace('{obj}', name(label, lang, 1));
+}
+
+// One detection as its own short sentence: "There are two people on your
+// left." Separate sentences let the browser fetch and replay each one
+// independently, and common ones are already cached.
+function detectionSentence(label, n, position, lang) {
+  const phrases = PHRASES[lang] ?? PHRASES.en;
+  const positions = POSITIONS[lang] ?? POSITIONS.en;
+  const word = name(label, lang, n);
+  const quantity = count(n, lang) ?? article(word);
+  const where = positions[position];
+
+  // English puts the verb first; Hindi, Marathi and Gujarati put it last.
+  if (lang === 'en') {
+    const verb = n > 1 ? phrases.verbMany : phrases.verbOne;
+    return `${verb} ${quantity} ${word} ${where}.`;
+  }
+
+  const verb = n > 1 ? phrases.verbMany : phrases.verbOne;
+  return `${quantity} ${word} ${where} ${verb}`;
+}
+
 /**
  * Walk Mode: return a short warning, or null when nothing needs saying.
  *
@@ -177,11 +210,8 @@ export function buildAlert(objects, lang = 'en', viewBlocked = false, tooDark = 
 
   if (!candidate) return null;
 
-  const template = (ALERTS[lang] ?? ALERTS.en)[candidate.position];
-  const word = name(candidate.label, lang, 1);
-
   return {
-    alert: template.replace('{obj}', word),
+    alert: alertText(candidate.label, candidate.position, lang),
     key: `${candidate.label}|${candidate.position}`,
   };
 }
@@ -223,10 +253,17 @@ export function describeText({ text, confidence }, lang = 'en', translated = fal
   const phrases = source[lang] ?? source.en;
 
   if (!text || confidence < MIN_READ_CONFIDENCE) {
-    return { message: phrases.unreadable, read: false };
+    return { message: phrases.unreadable, segments: [phrases.unreadable], read: false };
   }
 
-  return { message: `${phrases.prefix} ${text}`, read: true, confidence };
+  // The prefix is its own segment: it is a fixed phrase, already cached,
+  // so the listener hears it at once while the text itself is generated.
+  return {
+    message: `${phrases.prefix} ${text}`,
+    segments: [phrases.prefix, text],
+    read: true,
+    confidence,
+  };
 }
 
 /**
@@ -237,10 +274,9 @@ export function describeText({ text, confidence }, lang = 'en', translated = fal
  */
 export function describeDetections(objects, lang = 'en') {
   const phrases = PHRASES[lang] ?? PHRASES.en;
-  const positions = POSITIONS[lang] ?? POSITIONS.en;
 
   if (!objects || objects.length === 0) {
-    return { message: phrases.nothing, warning: false };
+    return { message: phrases.nothing, segments: [phrases.nothing], warning: false };
   }
 
   // Group identical labels sharing a position: "two people on your left".
@@ -262,27 +298,47 @@ export function describeDetections(objects, lang = 'en') {
     .sort((a, b) => b.area - a.area)
     .slice(0, MAX_SPOKEN);
 
-  const parts = ordered.map((g) => {
-    const word = name(g.label, lang, g.n);
-    const quantity = count(g.n, lang) ?? article(word);
-    return `${quantity} ${word} ${positions[g.position]}`;
-  });
-
-  // A comma-separated list reads more naturally when spoken aloud.
-  const list = parts.join(', ');
-
   const blocking = ordered.find(
     (g) => g.position === 'center' && g.area >= OBSTACLE_AREA,
   );
 
-  // English puts the verb first ("There is a chair..."); Hindi, Marathi
-  // and Gujarati put it last ("...खुर्ची आहे.").
-  const sentence = lang === 'en'
-    ? `${phrases.verb} ${list}.`
-    : `${list} ${phrases.verb}`;
+  const segments = ordered.map((g) => detectionSentence(g.label, g.n, g.position, lang));
+  if (blocking) segments.unshift(phrases.warning);
 
   return {
-    message: blocking ? `${phrases.warning} ${sentence}` : sentence,
+    message: segments.join(' '),
+    segments,
     warning: Boolean(blocking),
   };
+}
+
+/**
+ * Every fixed phrase this file can say in a language.
+ *
+ * Used to pre-generate speech in the background, so that the first
+ * warning of a walk is as fast as the hundredth. The strings come from
+ * the same builders that produce live responses, so they match exactly.
+ */
+export function speechPhrases(lang) {
+  const phrases = PHRASES[lang];
+  if (!phrases) return [];
+
+  const list = [
+    phrases.nothing,
+    phrases.warning,
+    BLOCKED_ALERT[lang],
+    TOO_DARK_ALERT[lang],
+    READING[lang].prefix,
+    READING[lang].unreadable,
+    TRANSLATION[lang].prefix,
+  ];
+
+  for (const label of Object.keys(OBJECTS)) {
+    for (const position of ['left', 'center', 'right']) {
+      list.push(alertText(label, position, lang));
+      list.push(detectionSentence(label, 1, position, lang));
+    }
+  }
+
+  return list.filter(Boolean);
 }

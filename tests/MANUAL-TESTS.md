@@ -23,10 +23,11 @@ say `YOLO loaded`, then open Chrome at <http://localhost:3000>.
 | # | Do this | Expected | ✅/❌ |
 |---|---|---|---|
 | B1 | Language **English**, click **Help** | Hears the command list immediately | |
-| B2 | Language **मराठी**, click **Help** | ~3 s pause, then real Marathi speech | |
-| B3 | Click **Help** again | Instant — served from cache, no API call | |
-| B4 | While it speaks, press **Escape** | Audio stops at once | |
+| B2 | Language **मराठी**, click **Help** (first time) | Marathi speech starts within ~2 s | |
+| B3 | Click **Help** again | Starts almost instantly (cached) | |
+| B4 | While it speaks, press **Escape** | Audio stops at once, nothing more plays | |
 | B5 | Repeat B2 in **हिंदी** and **ગુજરાતી** | Correct language each time | |
+| B6 | Open the page in Marathi, wait 40 s, then click **Detect Objects** at a person | Answer starts in well under a second after the result | |
 
 ## C. Voice commands
 
@@ -58,20 +59,29 @@ say `YOLO loaded`, then open Chrome at <http://localhost:3000>.
 | E1 | Click **Walk Mode** | Hears the warning that this is an aid, not a guarantee | |
 | E2 | Point at an empty room, wait 20 s | **Silence.** Chatter here means the thresholds are wrong. | |
 | E3 | Walk slowly toward a chair or door | Warns before you reach it | |
-| E4 | Keep pointing at the same object | Says it once, then quiet ~4 s | |
+| E4 | Hold the camera on the SAME object for 30 seconds | **One** short beep and **one** spoken warning. Then silence, apart from a quiet tone about every 10 s. It must NOT keep repeating the sentence. | |
+| E4b | Move the object away | **Silence.** No warning about something that has gone. | |
+| E4c | Bring the object back | Warns again, once | |
 | E5 | Cover the camera with your hand | *"Stop. Something is right in front of you."* | |
 | E6 | Turn the lights off | *"It is too dark to see. Please turn on a light."* — **not** a collision warning | |
 | E7 | Press **Escape** | Walk Mode stops | |
 | E8 | Close the Python window, start Walk Mode | After ~5 failed checks it stops and says why | |
 
-## F. Read Text and Translate
+## F. Read Text (reads and translates, in ONE button)
+
+Read Text always speaks in the language selected at the top, whatever language
+the page is in.
 
 | # | Do this | Expected | ✅/❌ |
 |---|---|---|---|
-| F1 | Point at a book/label → **Read Text** | Reads the exact printed words in 2–3 s | |
-| F2 | Point at English text, language **मराठी** → **Translate** | Hears the Marathi **meaning** | |
-| F3 | Same text → **Read Text** | Hears the English **words** — different prefix | |
-| F4 | Point at a blank page → **Read Text** | *"I could not read the text clearly…"* | |
+| F1 | Language **English**, point at an English page → **Read Text** | Reads the exact printed words, **aloud** | |
+| F2 | Language **मराठी**, point at an English page → **Read Text** | Hears *"याचा अर्थ आहे…"* then the Marathi meaning, **aloud** | |
+| F3 | Language **मराठी**, point at a Marathi page | Hears *"यावर लिहिले आहे…"* then the exact words | |
+| F4 | Language **English**, point at a Marathi or Hindi page | Hears the English meaning | |
+| F5 | A page with several paragraphs (about 10 lines), language **मराठी** | Starts speaking within a few seconds and keeps going to the end. It must not stay silent. | |
+| F6 | While it is reading a long page, say **"stop"** | Stops at once | |
+| F7 | Point at a blank page → **Read Text** | *"I could not read the text clearly…"* | |
+| F8 | Say **"translate this"** | Does the same as **Read Text** | |
 
 ## G. Accessibility — the important section
 
@@ -85,7 +95,7 @@ This is the project's whole purpose: **can someone who cannot see use it alone?*
 | G4 | Turn on **Windows Narrator** (`Win + Ctrl + Enter`) | Buttons announced by name; status changes read out | |
 | G5 | Unplug the internet, click **Detect Objects** | Still works — YOLO is local | |
 | G6 | Still offline, click **Describe Scene** | Spoken error naming the problem | |
-| G7 | Still offline, **Read Text** | Still works via EasyOCR fallback | |
+| G7 | Still offline, **Read Text** (English) | Still reads, via the EasyOCR fallback. It cannot translate offline. | |
 
 ## H. Mobile
 

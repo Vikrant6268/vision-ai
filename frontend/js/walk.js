@@ -1,19 +1,25 @@
 // =====================================================================
 // walk.js – Walk Mode: continuous obstacle alerts.
 //
-// The camera is checked a few times a second, but the app stays SILENT
-// unless something large is actually in the way. Constant narration
-// would make the app unusable while walking, and would drown out real
-// warnings.
+// The camera is checked twice a second, but the app stays SILENT unless
+// something is actually in the way, and it warns once when the obstacle
+// appears rather than repeatedly while it stays. When to speak is
+// decided in alertPolicy.js; this file does the camera, the network and
+// the sound.
 //
-// The announcement policy is the important part of this file:
+//   frame → server (YOLO + proximity) → alert key
+//             ↓
+//        alertPolicy: appeared?  already warned?  gone?
+//             ↓
+//        tone at once  →  spoken warning follows
 //
-//   detection
-//      ↓  is it big AND in the way?            (server decides)
-//      ↓  have we just said this?              (cooldown)
-//      ↓  are we already speaking?             (no talking over)
-//      ↓
-//   speak
+// Two things keep a warning honest:
+//
+//   - Frames keep being checked WHILE a warning is being prepared, so the
+//     app always knows the current situation.
+//   - Just before the warning is heard we check again. If the obstacle
+//     has gone in the meantime the warning is dropped, rather than
+//     telling someone about something that is no longer there.
 //
 // IMPORTANT: this is an assistive aid, not a guarantee. It can miss
 // objects, and it cannot measure distance.
@@ -22,15 +28,12 @@
 import * as api from './api.js';
 import * as speech from './speech.js';
 import * as camera from './camera.js';
+import * as sound from './sound.js';
+import { createAlertPolicy } from './alertPolicy.js';
 import { t, getLanguage } from './languages.js';
 
-// How often to look. Detection takes about 80ms, so 2 checks/second
-// leaves plenty of headroom. Raised from 1.2/s after testing showed
-// warnings arriving too late.
+// Detection takes about 80 ms, so two checks a second leaves headroom.
 const INTERVAL_MS = 500;
-
-// Don't repeat the same warning more often than this.
-const COOLDOWN_MS = 4000;
 
 // Give up on a frame that takes too long rather than queueing requests.
 const REQUEST_TIMEOUT_MS = 4000;
@@ -38,19 +41,19 @@ const REQUEST_TIMEOUT_MS = 4000;
 // Stop after repeated failures instead of retrying forever in silence.
 const MAX_FAILURES = 5;
 
-// A "blocked view" must be seen twice in a row before we announce it.
-// Swinging the camera briefly blurs the frame, and one blurred frame
-// should not sound an alarm.
-const BLOCKED_CONFIRMATIONS = 2;
+// "Blocked" and "dark" must be seen twice in a row. Swinging the camera
+// briefly blurs a frame, and one blurred frame should not sound an alarm.
+const CONFIRM_FRAMES = 2;
+const NEEDS_CONFIRMATION = new Set(['blocked', 'dark']);
 
 let running = false;
 let timer = null;
 let inFlight = false;
 let failures = 0;
-let blockedStreak = 0;
+let streak = { key: null, count: 0 };
+let currentKey = null;       // what the most recent frame showed
 
-// alertKey → timestamp of the last time we said it.
-const lastAnnounced = new Map();
+const policy = createAlertPolicy();
 
 let onStateChange = () => {};
 
@@ -63,15 +66,25 @@ export function onChange(callback) {
   onStateChange = callback;
 }
 
-function shouldAnnounce(key) {
-  const previous = lastAnnounced.get(key);
-  return !previous || Date.now() - previous >= COOLDOWN_MS;
+// Count how many frames in a row showed the same thing, so brief
+// glitches never reach the policy.
+function confirmed(key) {
+  streak = key === streak.key ? { key, count: streak.count + 1 } : { key, count: 1 };
+
+  if (key && NEEDS_CONFIRMATION.has(key) && streak.count < CONFIRM_FRAMES) return null;
+  return key;
+}
+
+async function announce(key, text) {
+  // The tone is immediate; the spoken warning follows when it is ready.
+  sound.beep(NEEDS_CONFIRMATION.has(key) ? 'urgent' : 'alert');
+
+  const voice = speech.prepare(text);
+  await voice.play(() => currentKey === key);   // dropped if already gone
 }
 
 async function checkFrame() {
-  // Skip this tick if the previous one is still running, or if we are
-  // mid-sentence. Both would pile up audio the user cannot follow.
-  if (!running || inFlight || speech.isSpeaking()) return;
+  if (!running || inFlight) return;
 
   inFlight = true;
 
@@ -81,18 +94,14 @@ async function checkFrame() {
 
     failures = 0;
 
-    // Require consecutive blocked frames; a single blurred frame while
-    // turning is not an obstacle.
-    blockedStreak = result.viewBlocked ? blockedStreak + 1 : 0;
+    currentKey = confirmed(result.alertKey ?? null);
 
-    const blockedConfirmed = blockedStreak >= BLOCKED_CONFIRMATIONS;
-    const isBlockedAlert = result.alertKey === 'blocked';
+    const decision = policy.update(currentKey);
 
-    if (isBlockedAlert && !blockedConfirmed) return;
-
-    if (result.alert && shouldAnnounce(result.alertKey)) {
-      lastAnnounced.set(result.alertKey, Date.now());
-      await speech.speak(result.alert);
+    if (decision === 'announce') {
+      announce(currentKey, result.alert);        // not awaited: keep checking frames
+    } else if (decision === 'remind') {
+      sound.beep('reminder');                    // a tone only, no repeated speech
     }
   } catch (error) {
     failures += 1;
@@ -113,8 +122,9 @@ export async function start() {
 
   running = true;
   failures = 0;
-  blockedStreak = 0;
-  lastAnnounced.clear();
+  streak = { key: null, count: 0 };
+  currentKey = null;
+  policy.reset();
 
   timer = setInterval(checkFrame, INTERVAL_MS);
   onStateChange(true);
@@ -128,5 +138,6 @@ export async function stop() {
   running = false;
   clearInterval(timer);
   timer = null;
+  currentKey = null;
   onStateChange(false);
 }
