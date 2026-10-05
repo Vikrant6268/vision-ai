@@ -7,7 +7,8 @@
 /* ---------- Design tokens ----------
    Dark, high-contrast theme by default: many low-vision users find
    light text on a dark background easier to read (less glare).
-   Yellow on black gives a contrast ratio of ~19:1 (WCAG AAA needs 7:1). */
+   Contrast ratios: white text on black 21:1, the yellow accent on black
+   14.9:1, white on the button surface 18.1:1. WCAG AAA needs 7:1. */
 :root {
   --bg:         #000000;
   --surface:    #161616;
