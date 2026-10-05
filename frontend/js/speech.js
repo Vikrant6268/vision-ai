@@ -89,19 +89,50 @@ function toPieces(input) {
 // Playing
 // ---------------------------------------------------------------------
 
+// How often to check whether the device has stopped talking, and the
+// longest a piece may take (generous: ~15 characters a second, plus 3 s).
+const SPEECH_POLL_MS = 250;
+const msFor = (text) => 3000 + text.length * 70;
+
 function speakWithDevice(text, tag = speechTag()) {
   return new Promise((resolve) => {
     if (!('speechSynthesis' in window)) return resolve();
 
-    finishCurrent = resolve;
+    // Mobile Chrome often never fires "end" for an utterance. Waiting for
+    // it alone left the app thinking it was still talking - and because
+    // the microphone is off while the app talks, voice commands stopped
+    // working for good. So we also watch speechSynthesis.speaking, and
+    // give up after a generous time limit. Whichever happens first wins.
+    let finished = false;
+    let started = false;
+    let poll = null;
+    const begin = Date.now();
+
+    const done = () => {
+      if (finished) return;
+      finished = true;
+      clearInterval(poll);
+      resolve();
+    };
+
+    finishCurrent = done;
 
     utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = tag;
     utterance.rate = 1.05;
-    utterance.onend = resolve;
-    utterance.onerror = resolve;      // resolve anyway so the UI never sticks
+    utterance.onstart = () => { started = true; };
+    utterance.onend = done;
+    utterance.onerror = done;          // resolve anyway so the UI never sticks
 
     window.speechSynthesis.speak(utterance);
+
+    poll = setInterval(() => {
+      const synth = window.speechSynthesis;
+      const talking = synth.speaking || synth.pending;
+
+      if (talking) started = true;
+      if ((started && !talking) || Date.now() - begin > msFor(text)) done();
+    }, SPEECH_POLL_MS);
   });
 }
 

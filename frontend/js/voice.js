@@ -21,9 +21,15 @@
 // Now recognition is paused the moment speech starts and resumed a
 // moment after it ends, so the microphone never hears the app at all.
 //
-// Two more filters keep stray sounds out:
-//   - very short results (a cough, a click) are ignored
-//   - results the recogniser itself is unsure about are ignored
+// One phrase per listening session. Chrome on Android ignores
+// "continuous" mode and stops after each phrase anyway, and in that mode
+// it can repeat earlier words in later results. So we listen for one
+// phrase, and the restart loop below starts the next session - the same
+// behaviour on phones and on laptops.
+//
+// Very short results (a cough, a click) are ignored. We do NOT filter on
+// the recogniser's "confidence" score: phones report low scores for
+// perfectly good commands, and doing so threw real commands away.
 // =====================================================================
 
 import { speechTag } from './languages.js';
@@ -41,16 +47,17 @@ const RESUME_DELAY_MS = 700;
 // Shorter than this many letters is noise, not a command.
 const MIN_LETTERS = 2;
 
-// Chrome scores each result from 0 to 1. Below this it is usually a
-// mis-hearing. (Some versions always report 0, meaning "unknown"; those
-// results are kept.)
-const MIN_CONFIDENCE = 0.4;
+// Safety net: if the app has been "speaking" for longer than this, the
+// microphone is switched back on anyway. A stuck speaking state must
+// never leave a blind user with a dead microphone.
+const MAX_PAUSE_MS = 60000;
 
 let recognition = null;
 let running = false;      // the user wants voice commands on
 let paused = false;       // temporarily off while the app speaks
 let restartTimer = null;
 let resumeTimer = null;
+let pauseGuard = null;
 
 let onCommand = () => {};
 let onStateChange = () => {};
@@ -85,7 +92,7 @@ function build() {
   const instance = new SpeechRecognition();
 
   instance.lang = speechTag();
-  instance.continuous = true;
+  instance.continuous = false;       // one phrase per session, see above
   instance.interimResults = false;
   instance.maxAlternatives = 1;
 
@@ -96,11 +103,9 @@ function build() {
     const result = event.results[event.results.length - 1];
     if (!result.isFinal) return;
 
-    const { transcript, confidence } = result[0];
-    const text = transcript.trim();
+    const text = result[0].transcript.trim();
 
     if (letterCount(text) < MIN_LETTERS) return;
-    if (confidence > 0 && confidence < MIN_CONFIDENCE) return;
 
     onHeard(text);
     onCommand(text);
@@ -143,16 +148,20 @@ speech.onSpeakingChange((speaking) => {
   if (!running) return;
 
   clearTimeout(resumeTimer);
+  clearTimeout(pauseGuard);
+
+  const resume = () => {
+    paused = false;
+    listen();
+  };
 
   if (speaking) {
     paused = true;
     clearTimeout(restartTimer);
     try { recognition?.abort(); } catch { /* already stopped */ }
+    pauseGuard = setTimeout(resume, MAX_PAUSE_MS);
   } else {
-    resumeTimer = setTimeout(() => {
-      paused = false;
-      listen();
-    }, RESUME_DELAY_MS);
+    resumeTimer = setTimeout(resume, RESUME_DELAY_MS);
   }
 });
 
@@ -172,6 +181,7 @@ export function stop() {
   paused = false;
   clearTimeout(restartTimer);
   clearTimeout(resumeTimer);
+  clearTimeout(pauseGuard);
 
   if (recognition) {
     recognition.onend = null;      // don't let the restart loop fire
