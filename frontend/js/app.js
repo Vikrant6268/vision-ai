@@ -89,6 +89,15 @@ async function toggleWalk() {
     return;
   }
 
+  // Walk Mode needs the object-detection service. On the hosted version
+  // it does not run (it needs a GPU-class machine), so say so at once
+  // instead of failing after several silent checks.
+  const health = await api.checkHealth().catch(() => null);
+  if (health && !health.detectionAvailable) {
+    await respond(t('walkUnavailable'));
+    return;
+  }
+
   if (!(await ensureCamera())) return;
   await walk.start();
 }

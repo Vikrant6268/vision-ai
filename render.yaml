@@ -1,0 +1,39 @@
+# =====================================================================
+# render.yaml - how Render builds and runs Vision AI.
+#
+# Render reads this file when you create a "Blueprint" from the GitHub
+# repository, so the whole setup lives in the code instead of in
+# settings clicked together by hand.
+#
+# What is deployed: the Node.js backend, which also serves the website.
+# That covers voice commands, Describe Scene, Read Text (with
+# translation) and speech in all four languages.
+#
+# What is NOT deployed: the Python AI service (YOLO object detection,
+# Walk Mode). PyTorch alone is about 3 GB and wants a GPU; Render's free
+# plan has 512 MB of memory and no GPU. The app detects this and tells
+# the user those features are unavailable, and they keep working on a
+# laptop that runs start.bat.
+# =====================================================================
+
+services:
+  - type: web
+    name: vision-ai
+    runtime: node
+    plan: free
+
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+
+    # Render calls this to decide whether a new version is healthy
+    # before sending visitors to it.
+    healthCheckPath: /api/health
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      # The secret. "sync: false" means it is NOT stored in this file or
+      # on GitHub: Render asks for it when the Blueprint is created.
+      - key: GEMINI_API_KEY
+        sync: false
