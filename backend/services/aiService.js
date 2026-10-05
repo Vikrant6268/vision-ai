@@ -15,7 +15,13 @@ import { isInLanguage } from './languageDetect.js';
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 const TIMEOUT_MS = 10000;
 const READ_TIMEOUT_MS = 20000;      // a full page of text takes longer
-const RETRY_DELAY_MS = 800;
+// If a model has not answered within this long, the next model is asked
+// as well and whichever answers first is used (a "hedged request").
+// Gemini's speed varies through the day: in testing the same model took
+// 1.6s at one time and 8.7s at another, while the others answered in
+// 3-4s. Read Text makes two calls in a row, so one slow model doubled
+// the wait. Extra quota is used only when a model is being slow.
+const HEDGE_AFTER_MS = 3500;
 
 // Errors whose message is safe to SPEAK to the user carry `expose = true`
 // so middleware/errorHandler.js passes the wording through unchanged.
@@ -25,8 +31,6 @@ function userError(message, status) {
   error.expose = true;
   return error;
 }
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // When Google says a model is over its quota it also says when to come
 // back ("Please retry in 57s"). Until then that model is skipped, so the
@@ -167,29 +171,62 @@ async function run(base64Image, mimeType, languageCode, prompt, timeoutMs = TIME
     throw userError('Scene description is not set up on this server.', 503);
   }
 
-  // Try each model in turn, skipping any Google has told us to rest.
-  // A user who cannot see the screen should not have to guess that
-  // pressing the button again would have worked.
+  // Skip any model Google has told us to rest. If every model is resting,
+  // try them anyway rather than give up.
   const now = Date.now();
   const ready = config.geminiModels.filter((m) => (restingUntil.get(m) ?? 0) <= now);
-
-  // If every model is resting, try them anyway rather than give up.
   const plan = ready.length ? ready : config.geminiModels;
-  let last;
 
-  for (let i = 0; i < plan.length; i++) {
-    last = await attempt(base64Image, mimeType, languageCode, plan[i], prompt, timeoutMs);
+  // Hedged requests. Start the first model; if it fails, or is still
+  // silent after HEDGE_AFTER_MS, start the next one too. The first good
+  // answer wins. A user who cannot see the screen should not wait for a
+  // slow model when a faster one is available.
+  return new Promise((resolve, reject) => {
+    let next = 0;
+    let running = 0;
+    let done = false;
+    let lastError = null;
+    let hedgeTimer = null;
 
-    if (last.text) return last.text;
-    if (!last.retryable) break;
+    const finish = (callback, value) => {
+      done = true;
+      clearTimeout(hedgeTimer);
+      callback(value);
+    };
 
-    if (i < plan.length - 1) {
-      console.warn(`[gemini] ${plan[i]} unavailable, trying ${plan[i + 1]}`);
-      await sleep(RETRY_DELAY_MS);
-    }
-  }
+    const launch = () => {
+      if (done || next >= plan.length) return;
 
-  throw last.error;
+      const model = plan[next];
+      next += 1;
+      running += 1;
+
+      clearTimeout(hedgeTimer);
+      hedgeTimer = setTimeout(() => {
+        if (next < plan.length) console.warn(`[gemini] ${model} is slow, also asking ${plan[next]}`);
+        launch();
+      }, HEDGE_AFTER_MS);
+
+      attempt(base64Image, mimeType, languageCode, model, prompt, timeoutMs).then((result) => {
+        running -= 1;
+        if (done) return;                        // another model already answered
+
+        if (result.text) return finish(resolve, result.text);
+
+        lastError = result.error;
+        if (!result.retryable) return finish(reject, result.error);   // e.g. a bad key
+
+        if (next < plan.length) {
+          console.warn(`[gemini] ${model} unavailable, trying ${plan[next]}`);
+          launch();
+        } else if (running === 0) {
+          finish(reject, lastError);             // every model has failed
+        }
+      });
+    };
+
+    launch();
+  });
 }
 
 export function describeImage(base64Image, mimeType, languageCode) {
