@@ -244,3 +244,17 @@ body {
 .mic-btn.listening {
   box-shadow: 0 0 0 6px var(--focus);
 }
+
+/* ---------- Diagnostic view (only with #debug in the address) ---------- */
+.debug-log {
+  margin: 0;
+  padding: 0.75rem;
+  max-height: 40vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.8rem;
+  background: var(--surface);
+  border: 2px dashed var(--border);
+  border-radius: 8px;
+}

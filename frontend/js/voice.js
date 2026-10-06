@@ -15,21 +15,26 @@
 // while we were talking. That failed: Chrome delivers a transcript a
 // second or more after the words were spoken, so the app's own voice
 // arrived as a "command", matched nothing, and the app replied "Sorry,
-// say help" - which it then heard too, and replied to again. In use the
-// app kept asking for "help" and missed what the user actually said.
+// say help" - which it then heard too, and replied to again.
 //
-// Now recognition is paused the moment speech starts and resumed a
+// Now recognition is stopped the moment speech starts and restarted a
 // moment after it ends, so the microphone never hears the app at all.
 //
-// One phrase per listening session. Chrome on Android ignores
-// "continuous" mode and stops after each phrase anyway, and in that mode
-// it can repeat earlier words in later results. So we listen for one
-// phrase, and the restart loop below starts the next session - the same
-// behaviour on phones and on laptops.
+// A FRESH RECOGNISER FOR EVERY LISTENING SESSION.
 //
-// Very short results (a cough, a click) are ignored. We do NOT filter on
-// the recogniser's "confidence" score: phones report low scores for
-// perfectly good commands, and doing so threw real commands away.
+// On Android, a recogniser that is stopped before it has fully started
+// can refuse to start again - silently. That is exactly what happens
+// when the user taps the microphone: listening starts, and a moment
+// later the app stops it to say "I am listening". Reusing that same
+// recogniser left the microphone dead on phones with no error at all.
+// Creating a new one each time avoids the problem entirely.
+//
+// One phrase per session: Chrome on Android ignores "continuous" mode
+// and stops after each phrase anyway, so laptops and phones behave the
+// same way.
+//
+// ERRORS ARE NEVER SILENT. If the microphone, the network or the
+// language is the problem, the app is told and says so aloud.
 // =====================================================================
 
 import { speechTag } from './languages.js';
@@ -48,13 +53,25 @@ const RESUME_DELAY_MS = 700;
 const MIN_LETTERS = 2;
 
 // Safety net: if the app has been "speaking" for longer than this, the
-// microphone is switched back on anyway. A stuck speaking state must
-// never leave a blind user with a dead microphone.
+// microphone is switched back on anyway.
 const MAX_PAUSE_MS = 60000;
 
-let recognition = null;
+// This many sessions in a row ending in an error (not silence) means
+// something is really wrong: stop and tell the user, rather than retry
+// forever while they wonder why nothing happens.
+const MAX_ERRORS_IN_A_ROW = 4;
+
+// Errors that are part of normal use and are simply retried.
+const ROUTINE_ERRORS = new Set(['no-speech', 'aborted']);
+
+// Errors that will not fix themselves by retrying.
+const FATAL_ERRORS = new Set(['not-allowed', 'service-not-allowed', 'language-not-supported']);
+
+let recognition = null;   // the recogniser for the current session
 let running = false;      // the user wants voice commands on
 let paused = false;       // temporarily off while the app speaks
+let errorsInARow = 0;
+let lastErrorReason = 'failed';   // best explanation if we have to give up
 let restartTimer = null;
 let resumeTimer = null;
 let pauseGuard = null;
@@ -62,6 +79,7 @@ let pauseGuard = null;
 let onCommand = () => {};
 let onStateChange = () => {};
 let onHeard = () => {};
+let onEvent = () => {};
 
 export function isSupported() {
   return Boolean(SpeechRecognition);
@@ -75,6 +93,8 @@ export function onResult(callback) {
   onCommand = callback;
 }
 
+// callback(active, reason) - reason explains why listening stopped:
+// 'denied', 'network', 'audio-capture', 'language-not-supported', 'failed'.
 export function onChange(callback) {
   onStateChange = callback;
 }
@@ -84,62 +104,108 @@ export function onTranscript(callback) {
   onHeard = callback;
 }
 
+// Every recogniser event, for the on-screen diagnostic view.
+export function onDebug(callback) {
+  onEvent = callback;
+}
+
 function letterCount(text) {
   return (text.match(/\p{L}/gu) || []).length;
 }
 
-function build() {
+// Stop listening for good and report why.
+function giveUp(reason) {
+  running = false;
+  discard();
+  onStateChange(false, reason);
+}
+
+// Throw away the current recogniser without triggering a restart.
+function discard() {
+  const old = recognition;
+  recognition = null;
+  if (!old) return;
+  old.onresult = null;
+  old.onerror = null;
+  old.onend = null;
+  try { old.abort(); } catch { /* already stopped */ }
+}
+
+function scheduleListen(delay) {
+  clearTimeout(restartTimer);
+  restartTimer = setTimeout(listen, delay);
+}
+
+function listen() {
+  if (!running || paused) return;
+
+  discard();
+
   const instance = new SpeechRecognition();
+  recognition = instance;
 
   instance.lang = speechTag();
-  instance.continuous = false;       // one phrase per session, see above
+  instance.continuous = false;          // one phrase per session, see above
   instance.interimResults = false;
   instance.maxAlternatives = 1;
 
-  instance.onresult = (event) => {
-    // Belt and braces: nothing heard while we are speaking is a command.
-    if (paused || speech.isSpeaking()) return;
+  let failed = false;
 
+  instance.onstart = () => onEvent('start', instance.lang);
+  instance.onspeechstart = () => onEvent('speech detected');
+
+  instance.onresult = (event) => {
     const result = event.results[event.results.length - 1];
     if (!result.isFinal) return;
 
     const text = result[0].transcript.trim();
+    onEvent('heard', text);
 
+    // Belt and braces: nothing heard while we are speaking is a command.
+    if (paused || speech.isSpeaking()) return;
     if (letterCount(text) < MIN_LETTERS) return;
 
+    errorsInARow = 0;
     onHeard(text);
     onCommand(text);
   };
 
   instance.onerror = (event) => {
-    // "no-speech" and "aborted" are normal in continuous use.
-    if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-      running = false;
-      onStateChange(false, 'denied');
-      return;
-    }
-    if (event.error !== 'no-speech' && event.error !== 'aborted') {
-      console.warn('Speech recognition error:', event.error);
+    onEvent('error', event.error);
+    if (ROUTINE_ERRORS.has(event.error)) return;
+
+    failed = true;
+    if (event.error === 'network' || event.error === 'audio-capture') lastErrorReason = event.error;
+
+    if (FATAL_ERRORS.has(event.error)) {
+      giveUp(event.error === 'language-not-supported' ? event.error : 'denied');
     }
   };
 
-  // Chrome ends recognition regularly. Start it again so listening
-  // really is continuous - unless we paused it on purpose.
   instance.onend = () => {
-    if (!running || paused) return;
-    clearTimeout(restartTimer);
-    restartTimer = setTimeout(listen, RESTART_DELAY_MS);
+    onEvent('end');
+    if (instance !== recognition) return;           // an old recogniser
+
+    if (failed) {
+      errorsInARow += 1;
+      if (errorsInARow >= MAX_ERRORS_IN_A_ROW) {
+        giveUp(lastErrorReason);
+        return;
+      }
+    }
+
+    if (running && !paused) scheduleListen(RESTART_DELAY_MS);
   };
 
-  return instance;
-}
-
-function listen() {
-  if (!running || paused || !recognition) return;
   try {
-    recognition.start();
-  } catch {
-    // Already started - harmless.
+    instance.start();
+  } catch (error) {
+    // Starting failed outright. Count it and try again shortly; after
+    // several failures the user is told.
+    onEvent('start failed', error.name);
+    errorsInARow += 1;
+    if (errorsInARow >= MAX_ERRORS_IN_A_ROW) giveUp('failed');
+    else scheduleListen(RESTART_DELAY_MS * 3);
   }
 }
 
@@ -158,7 +224,7 @@ speech.onSpeakingChange((speaking) => {
   if (speaking) {
     paused = true;
     clearTimeout(restartTimer);
-    try { recognition?.abort(); } catch { /* already stopped */ }
+    discard();
     pauseGuard = setTimeout(resume, MAX_PAUSE_MS);
   } else {
     resumeTimer = setTimeout(resume, RESUME_DELAY_MS);
@@ -168,8 +234,9 @@ speech.onSpeakingChange((speaking) => {
 export function start() {
   if (!isSupported() || running) return;
 
-  recognition = build();
   running = true;
+  errorsInARow = 0;
+  lastErrorReason = 'failed';
   paused = speech.isSpeaking();   // if we are mid-sentence, wait for it to end
 
   if (!paused) listen();
@@ -182,18 +249,12 @@ export function stop() {
   clearTimeout(restartTimer);
   clearTimeout(resumeTimer);
   clearTimeout(pauseGuard);
-
-  if (recognition) {
-    recognition.onend = null;      // don't let the restart loop fire
-    try { recognition.abort(); } catch { /* already stopped */ }
-    recognition = null;
-  }
-
+  discard();
   onStateChange(false);
 }
 
 // The recogniser's language is fixed when it is created, so switching
-// app language means rebuilding it.
+// app language means starting a new one.
 export function restartForLanguage() {
   if (!running) return;
   stop();

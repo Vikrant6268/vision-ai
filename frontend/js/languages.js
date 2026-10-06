@@ -34,6 +34,10 @@ export const UI = {
     notUnderstoodHelp: 'Sorry, I did not understand. Say help to hear the commands.',
     micDenied: 'I need permission to use the microphone. Please allow it and try again.',
     voiceUnsupported: 'This browser cannot listen for voice commands. Please use Chrome, or use the buttons.',
+    voiceNetwork: 'Voice commands need an internet connection. Please check your connection and tap the microphone again.',
+    voiceMicBusy: 'I cannot hear the microphone. Another app may be using it. Please close it and tap the microphone again.',
+    voiceLanguage: 'This device cannot recognise speech in this language. Please use the buttons, or switch to English.',
+    voiceFailed: 'Voice commands stopped working. Please tap the microphone to try again.',
   },
   hi: {
     speechTag: 'hi-IN',
@@ -60,6 +64,10 @@ export const UI = {
     notUnderstoodHelp: 'माफ़ कीजिए, मैं समझ नहीं पाया। आदेश सुनने के लिए मदद कहें।',
     micDenied: 'मुझे माइक्रोफ़ोन की अनुमति चाहिए। कृपया अनुमति दें।',
     voiceUnsupported: 'यह ब्राउज़र आवाज़ नहीं सुन सकता। कृपया Chrome का उपयोग करें, या बटन दबाएँ।',
+    voiceNetwork: 'आवाज़ आदेशों के लिए इंटरनेट चाहिए। कृपया कनेक्शन देखें और माइक्रोफ़ोन फिर से दबाएँ।',
+    voiceMicBusy: 'मुझे माइक्रोफ़ोन सुनाई नहीं दे रहा। शायद कोई दूसरा ऐप इसका उपयोग कर रहा है। कृपया उसे बंद करके माइक्रोफ़ोन फिर से दबाएँ।',
+    voiceLanguage: 'यह डिवाइस इस भाषा में आवाज़ नहीं पहचान सकता। कृपया बटन का उपयोग करें, या अंग्रेज़ी चुनें।',
+    voiceFailed: 'आवाज़ आदेश बंद हो गए। कृपया फिर से कोशिश करने के लिए माइक्रोफ़ोन दबाएँ।',
   },
   mr: {
     speechTag: 'mr-IN',
@@ -86,6 +94,10 @@ export const UI = {
     notUnderstoodHelp: 'माफ करा, मला समजले नाही. आज्ञा ऐकण्यासाठी मदत म्हणा.',
     micDenied: 'मला मायक्रोफोनची परवानगी हवी आहे. कृपया परवानगी द्या.',
     voiceUnsupported: 'हा ब्राउझर आवाज ऐकू शकत नाही. कृपया Chrome वापरा, किंवा बटणे वापरा.',
+    voiceNetwork: 'आवाज आज्ञांसाठी इंटरनेट हवे. कृपया कनेक्शन तपासा आणि मायक्रोफोन पुन्हा दाबा.',
+    voiceMicBusy: 'मला मायक्रोफोन ऐकू येत नाही. कदाचित दुसरे ॲप तो वापरत आहे. कृपया ते बंद करून मायक्रोफोन पुन्हा दाबा.',
+    voiceLanguage: 'हे उपकरण या भाषेत आवाज ओळखू शकत नाही. कृपया बटणे वापरा, किंवा इंग्रजी निवडा.',
+    voiceFailed: 'आवाज आज्ञा थांबल्या. पुन्हा प्रयत्न करण्यासाठी कृपया मायक्रोफोन दाबा.',
   },
   gu: {
     speechTag: 'gu-IN',
@@ -112,6 +124,10 @@ export const UI = {
     notUnderstoodHelp: 'માફ કરશો, હું સમજ્યો નહીં. આદેશો સાંભળવા મદદ કહો.',
     micDenied: 'મને માઇક્રોફોનની પરવાનગી જોઈએ છે. કૃપા કરીને પરવાનગી આપો.',
     voiceUnsupported: 'આ બ્રાઉઝર અવાજ સાંભળી શકતું નથી. કૃપા કરીને Chrome વાપરો, અથવા બટનો વાપરો.',
+    voiceNetwork: 'અવાજ આદેશો માટે ઇન્ટરનેટ જોઈએ. કૃપા કરીને કનેક્શન તપાસો અને માઇક્રોફોન ફરી દબાવો.',
+    voiceMicBusy: 'મને માઇક્રોફોન સંભળાતો નથી. કદાચ બીજી એપ તેનો ઉપયોગ કરી રહી છે. કૃપા કરીને તે બંધ કરીને માઇક્રોફોન ફરી દબાવો.',
+    voiceLanguage: 'આ ઉપકરણ આ ભાષામાં અવાજ ઓળખી શકતું નથી. કૃપા કરીને બટનો વાપરો, અથવા અંગ્રેજી પસંદ કરો.',
+    voiceFailed: 'અવાજ આદેશો બંધ થઈ ગયા. ફરી પ્રયાસ કરવા માટે કૃપા કરીને માઇક્રોફોન દબાવો.',
   },
 };
 

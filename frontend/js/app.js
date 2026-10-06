@@ -244,18 +244,50 @@ function toggleVoice() {
 
 voice.onResult(handleCommand);
 
+// Why listening stopped → what to tell the user. Never a silent failure.
+const VOICE_PROBLEMS = {
+  denied: 'micDenied',
+  network: 'voiceNetwork',
+  'audio-capture': 'voiceMicBusy',
+  'language-not-supported': 'voiceLanguage',
+  failed: 'voiceFailed',
+};
+
 voice.onChange((active, reason) => {
   micBtn.setAttribute('aria-pressed', String(active));
   micBtn.classList.toggle('listening', active);
 
   if (active) {
     setStatus(t('listening'));
-  } else if (reason === 'denied') {
-    respond(t('micDenied'));
+  } else if (VOICE_PROBLEMS[reason]) {
+    respond(t(VOICE_PROBLEMS[reason]));
   } else {
     setStatus(t('ready'));
   }
 });
+
+// Diagnostic view: open the page with #debug at the end of the address
+// to see, on screen, what the microphone is doing. A phone has no
+// developer console, so this is how a problem there can be reported.
+if (location.hash === '#debug') {
+  const log = document.createElement('pre');
+  log.className = 'debug-log';
+  log.setAttribute('aria-label', 'Voice diagnostics');
+  document.querySelector('main').append(log);
+
+  const began = Date.now();
+  const lines = [];
+  const add = (what, detail = '') => {
+    lines.push(`${((Date.now() - began) / 1000).toFixed(1).padStart(5)}s  ${what} ${detail}`);
+    if (lines.length > 30) lines.shift();
+    log.textContent = lines.join('\n');
+  };
+
+  add('browser', navigator.userAgent.replace(/^Mozilla\/5\.0 /, ''));
+  add('speech recognition', voice.isSupported() ? 'available' : 'NOT available');
+  voice.onDebug(add);
+  speech.onSpeakingChange((speaking) => add(speaking ? 'app speaking' : 'app quiet'));
+}
 
 // Show what was heard, which helps when testing with a sighted helper.
 voice.onTranscript((text) => {
