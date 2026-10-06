@@ -18,6 +18,8 @@ __pycache__/
 # ---------- AI model weights (large, re-downloadable) ----------
 *.pt
 *.onnx
+# ...except the browser model, which the website itself serves to phones
+!frontend/models/*.onnx
 ai-service/models/*
 !ai-service/models/.gitkeep
 

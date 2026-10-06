@@ -76,3 +76,21 @@ export function capture() {
   canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
   return canvas.toDataURL('image/jpeg', JPEG_QUALITY);
 }
+
+// The current frame as a canvas, for detection that runs in the browser.
+// 640 px wide by default: the size the "blocked view" thresholds were
+// calibrated at, and plenty for a 320 px detection model.
+let frameCanvas = null;
+
+export function frame(maxWidth = 640) {
+  if (!stream) throw new Error('cameraOff');
+
+  const scale = Math.min(1, maxWidth / video.videoWidth);
+  frameCanvas ??= document.createElement('canvas');
+  frameCanvas.width = Math.round(video.videoWidth * scale);
+  frameCanvas.height = Math.round(video.videoHeight * scale);
+
+  frameCanvas.getContext('2d', { willReadFrequently: true })
+    .drawImage(video, 0, 0, frameCanvas.width, frameCanvas.height);
+  return frameCanvas;
+}

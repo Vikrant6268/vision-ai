@@ -339,11 +339,21 @@ async function testFrontend() {
   check('Buttons have ARIA state where needed', html.includes('aria-pressed'));
   check('Status region announces changes', html.includes('aria-live'));
   check('No face recognition left', !/who is this/i.test(html));
+  const model = await fetch(`${BASE}/models/yolo11n-320.onnx`, { method: 'HEAD' });
+  check('Serves the in-browser detection model', model.status === 200);
+  const wasm = await fetch(`${BASE}/vendor/ort/ort-wasm-simd-threaded.wasm`, { headers: { 'Accept-Encoding': 'gzip' } });
+  check('Detection engine is compressed in transit', wasm.status === 200
+    && (wasm.headers.get('content-encoding') || '').includes('gzip'), wasm.headers.get('content-encoding'));
+  await wasm.arrayBuffer();
+  check('Security policy allows WebAssembly but not eval()',
+    /script-src 'self' 'wasm-unsafe-eval'/.test(page.headers.get('content-security-policy') || ''));
   check('Read and Translate are one button',
     !html.includes('data-action="translate"') && html.includes('data-action="read"'));
 
   for (const file of ['js/app.js', 'js/voice.js', 'js/commands.js', 'js/walk.js',
                       'js/alertPolicy.js', 'js/sound.js', 'js/textSplit.js',
+                      'js/detection.js', 'js/onDeviceDetector.js', 'js/cocoLabels.js',
+                      'shared/responseService.js', 'vendor/ort/ort.wasm.min.js',
                       'js/camera.js', 'js/speech.js', 'js/api.js', 'js/languages.js',
                       'css/style.css', 'css/accessibility.css']) {
     const r = await fetch(`${BASE}/${file}`);

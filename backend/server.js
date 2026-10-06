@@ -8,6 +8,7 @@
 // =====================================================================
 
 import express from 'express';
+import compression from 'compression';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
@@ -23,6 +24,11 @@ import { notFound, errorHandler } from './middleware/errorHandler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const frontendDir = path.join(__dirname, '..', 'frontend');
+const sharedDir = path.join(__dirname, '..', 'shared');
+const fixturesDir = path.join(__dirname, '..', 'tests', 'fixtures');
+
+// ONNX Runtime Web: the engine that runs YOLO inside the browser.
+const onnxRuntimeDir = path.join(__dirname, '..', 'node_modules', 'onnxruntime-web', 'dist');
 
 const app = express();
 const production = config.env === 'production';
@@ -42,7 +48,9 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'"],
+      // 'wasm-unsafe-eval' lets the page start WebAssembly (the in-browser
+      // detection engine). It does NOT allow eval() of JavaScript.
+      scriptSrc: ["'self'", "'wasm-unsafe-eval'"],
       styleSrc: ["'self'"],
       imgSrc: ["'self'", 'data:'],
       mediaSrc: ["'self'", 'data:', 'blob:'],   // spoken audio arrives as data: URLs
@@ -57,6 +65,7 @@ app.use(helmet({
   },
 }));
 
+app.use(compression());                              // gzip: the 14 MB detection engine travels as 3.5 MB
 app.use(morgan(production ? 'combined' : 'dev'));   // request log
 app.use(express.json({ limit: '10mb' }));            // photos arrive as base64 JSON
 
@@ -73,6 +82,26 @@ const aiLimit = rateLimit({
   legacyHeaders: false,
   message: { ok: false, error: 'Too many requests. Please wait a moment and try again.' },
 });
+
+// ---------- Files for in-browser detection ----------
+// The engine and the model are large and never change under the same
+// name, so browsers may keep them for a month. A phone downloads them
+// once, not on every visit.
+const longCache = { maxAge: production ? '30d' : 0, immutable: production };
+
+app.use('/vendor/ort', express.static(onnxRuntimeDir, longCache));
+app.use('/models', express.static(path.join(frontendDir, 'models'), longCache));
+
+// Code shared by the server and the browser (the sentence builder).
+app.use('/shared', express.static(sharedDir, {
+  setHeaders(res) {
+    if (!production) res.setHeader('Cache-Control', 'no-store');
+  },
+}));
+
+// Test photos, so the in-browser detector can be checked against the
+// same images as the server. Development only.
+if (!production) app.use('/test-fixtures', express.static(fixturesDir));
 
 // ---------- Static frontend ----------
 // In development the browser must never serve a cached copy of our

@@ -14,6 +14,7 @@
 import { createAlertPolicy } from '../frontend/js/alertPolicy.js';
 import { splitText, FIRST_PIECE, NEXT_PIECE } from '../frontend/js/textSplit.js';
 import { detectLanguage, isInLanguage } from '../backend/services/languageDetect.js';
+import { decode, analyseProximity, cannyDensity } from '../frontend/js/onDeviceDetector.js';
 
 let passed = 0;
 let failed = 0;
@@ -178,6 +179,47 @@ console.log('---------------------------------------');
   check('...and for a Hindi user', isInLanguage('प्रवेशद्वार पुणे स्टेशन', 'hi'));
   check('...but not for an English user', !isInLanguage('प्रवेशद्वार पुणे स्टेशन', 'en'));
   check('Gujarati text is not accepted as Marathi', !isInLanguage('તમારી સામે એક ખુરશી છે.', 'mr'));
+}
+
+// ---------------------------------------------------------------------
+console.log('\nIn-browser detection (phones)');
+console.log('------------------------------');
+
+{
+  // A fake YOLO output: 84 rows x 3 candidate boxes. Box 0 is a chair in
+  // the middle, box 1 a weaker duplicate of it, box 2 below the threshold.
+  const rows = 84;
+  const count = 3;
+  const out = new Float32Array(rows * count);
+  const set = (row, box, value) => { out[row * count + box] = value; };
+  const CHAIR = 56;
+
+  // centre x, centre y, width, height (in 320 px model space)
+  [[160, 160, 100, 100], [162, 158, 96, 104], [40, 40, 10, 10]].forEach((b, i) => b.forEach((v, r) => set(r, i, v)));
+  set(4 + CHAIR, 0, 0.9);
+  set(4 + CHAIR, 1, 0.7);
+  set(4 + 0, 2, 0.2);                       // a "person" below the 0.45 threshold
+
+  // A 640 x 640 frame that fills the model input exactly (scale 0.5).
+  const objects = decode(out, rows, count, { width: 640, height: 640 }, { scale: 0.5, dx: 0, dy: 0 });
+
+  check('Finds the chair', objects.length >= 1 && objects[0].label === 'chair', JSON.stringify(objects));
+  check('Removes the duplicate box of the same chair', objects.length === 1, `${objects.length} objects`);
+  check('Ignores detections below the confidence threshold', !objects.some((o) => o.label === 'person'));
+  check('Works out that it is in the centre', objects[0]?.position === 'center');
+  check('Measures how much of the frame it fills', Math.abs(objects[0]?.area - 0.0977) < 0.001, objects[0]?.area);
+}
+
+{
+  const w = 64; const h = 48;
+  const flat = (value) => new Uint8ClampedArray(w * h).fill(value);
+  const checker = new Uint8ClampedArray(w * h).map((_, i) => (((i % w) >> 3) + ((i / w) >> 3)) % 2 ? 220 : 30);
+
+  check('A dark frame is "too dark", not a collision', analyseProximity(flat(15), w, h).tooDark === true
+    && analyseProximity(flat(15), w, h).viewBlocked === false);
+  check('A flat, featureless bright frame counts as blocked', analyseProximity(flat(160), w, h).viewBlocked === true);
+  check('A detailed scene is clear', analyseProximity(checker, w, h).viewBlocked === false
+    && cannyDensity(checker, w, h) > 0.05);
 }
 
 // ---------------------------------------------------------------------

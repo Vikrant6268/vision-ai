@@ -11,6 +11,7 @@ import * as api from './api.js';
 import * as speech from './speech.js';
 import * as camera from './camera.js';
 import * as walk from './walk.js';
+import * as detection from './detection.js';
 import * as voice from './voice.js';
 import { match } from './commands.js';
 import { t, getLanguage, setLanguage, uiPhrases } from './languages.js';
@@ -62,7 +63,7 @@ async function ensureCamera() {
 // ---------------------------------------------------------------------
 
 // Take a photo and send it to a feature that needs one: "describe"
-// (Gemini), "detect" (YOLO) and "read" (Gemini OCR) all work this way.
+// (Gemini) and "read" (Gemini OCR) work this way.
 async function withPhoto(apiCall) {
   if (busy) return;
   busy = true;
@@ -82,6 +83,44 @@ async function withPhoto(apiCall) {
   }
 }
 
+// Make sure object detection can run. On a phone the first use downloads
+// the detection model (about 13 MB), which can take a while on mobile
+// data - so the user is told, instead of waiting in silence.
+async function ensureDetection() {
+  try {
+    if (await detection.needsDownload()) {
+      setStatus(t('detectionLoading'));
+      speech.speak(t('detectionLoading'));   // not awaited: download meanwhile
+    }
+    await detection.prepare();
+    return true;
+  } catch (error) {
+    console.error(error);
+    await respond(t('detectionFailed'));
+    return false;
+  }
+}
+
+// Detect Objects: one look at the scene, answered aloud.
+async function detectNow() {
+  if (busy) return;
+  busy = true;
+
+  try {
+    if (!(await ensureCamera())) return;
+    if (!(await ensureDetection())) return;
+
+    setStatus(t('processing'));
+    const result = await detection.detect(getLanguage());
+    await respond(result.message, result.segments);
+  } catch (error) {
+    console.error(error);
+    await respond(t('detectionFailed'));
+  } finally {
+    busy = false;
+  }
+}
+
 async function toggleWalk() {
   if (walk.isRunning()) {
     await walk.stop();
@@ -89,16 +128,8 @@ async function toggleWalk() {
     return;
   }
 
-  // Walk Mode needs the object-detection service. On the hosted version
-  // it does not run (it needs a GPU-class machine), so say so at once
-  // instead of failing after several silent checks.
-  const health = await api.checkHealth().catch(() => null);
-  if (health && !health.detectionAvailable) {
-    await respond(t('walkUnavailable'));
-    return;
-  }
-
   if (!(await ensureCamera())) return;
+  if (!(await ensureDetection())) return;
   await walk.start();
 }
 
@@ -121,7 +152,7 @@ const actions = {
   walk:      toggleWalk,
   describe:  () => withPhoto(api.describeScene),
   read:      () => withPhoto(api.readText),
-  detect:    () => withPhoto(api.detectObjects),
+  detect:    detectNow,
   repeat:    () => respond(speech.getLastSpoken() || t('nothingToRepeat')),
   stop:      () => { walk.stop(); speech.stop(); setStatus(t('ready')); },
   help:      () => respond(t('help')),

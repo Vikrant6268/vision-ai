@@ -25,9 +25,8 @@
 // objects, and it cannot measure distance.
 // =====================================================================
 
-import * as api from './api.js';
+import * as detection from './detection.js';
 import * as speech from './speech.js';
-import * as camera from './camera.js';
 import * as sound from './sound.js';
 import { createAlertPolicy } from './alertPolicy.js';
 import { t, getLanguage } from './languages.js';
@@ -89,8 +88,7 @@ async function checkFrame() {
   inFlight = true;
 
   try {
-    const photo = camera.capture();
-    const result = await api.detectObjects(photo, getLanguage(), REQUEST_TIMEOUT_MS);
+    const result = await detection.detect(getLanguage(), REQUEST_TIMEOUT_MS);
 
     failures = 0;
 
@@ -110,7 +108,7 @@ async function checkFrame() {
     if (failures >= MAX_FAILURES) {
       // Tell the user why it stopped. Never fail silently.
       await stop();
-      await speech.speak(error.message);
+      await speech.speak(t('detectionFailed'));
     }
   } finally {
     inFlight = false;

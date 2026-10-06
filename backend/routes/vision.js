@@ -10,7 +10,7 @@
 import { Router } from 'express';
 import { describeImage } from '../services/aiService.js';
 import { detectObjects } from '../services/pythonService.js';
-import { describeDetections, buildAlert } from '../services/responseService.js';
+import { describeDetections, buildAlert } from '../../shared/responseService.js';
 import { isSupported, DEFAULT_LANGUAGE, LANGUAGES } from '../config/languages.js';
 
 const router = Router();

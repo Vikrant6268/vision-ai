@@ -100,6 +100,16 @@ This is the project's whole purpose: **can someone who cannot see use it alone?*
 | G6 | Still offline, click **Describe Scene** | Spoken error naming the problem | |
 | G7 | Still offline, **Read Text** (English) | Still reads, via the EasyOCR fallback. It cannot translate offline. | |
 
+## H0. Detection on a phone (the hosted link)
+
+| # | Do this | Expected | ✅/❌ |
+|---|---|---|---|
+| H0a | On the phone, open the Render link, tap **Detect Objects** the first time | Hears *"Preparing object detection…"*, then an answer (first time can take up to a minute on mobile data) | |
+| H0b | Tap **Detect Objects** again | Answers in about a second, no download | |
+| H0c | **Walk Mode**, walk slowly towards a chair or door | Beep and one warning before you reach it | |
+| H0d | Cover the camera with your hand | *"Stop. Something is right in front of you."* | |
+| H0e | Close the browser, reopen the link, tap **Detect Objects** | No "Preparing" message: the model was kept | |
+
 ## H. Mobile
 
 | # | Do this | Expected | ✅/❌ |

@@ -29,7 +29,7 @@
 import { Router } from 'express';
 import { readImageText, translateText } from '../services/aiService.js';
 import { readText as readTextLocally } from '../services/pythonService.js';
-import { describeText } from '../services/responseService.js';
+import { describeText } from '../../shared/responseService.js';
 import { detectLanguage, isInLanguage } from '../services/languageDetect.js';
 import { isSupported, DEFAULT_LANGUAGE } from '../config/languages.js';
 

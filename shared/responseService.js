@@ -8,6 +8,11 @@
 //
 // Translation uses a local dictionary, NOT an API call, so obstacle
 // warnings are instant and keep working without internet.
+//
+// SHARED by the server and the browser. It has no imports and uses no
+// Node.js features, so the same file builds sentences on the server (for
+// YOLO running in Python) and on the phone (for YOLO running in the
+// browser). One source of wording, wherever detection happens.
 // =====================================================================
 
 // The COCO classes that actually matter to someone moving around.

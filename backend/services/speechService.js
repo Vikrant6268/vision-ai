@@ -31,7 +31,7 @@ import { fileURLToPath } from 'node:url';
 
 import { config } from '../config/env.js';
 import { isSupported } from '../config/languages.js';
-import { speechPhrases } from './responseService.js';
+import { speechPhrases } from '../../shared/responseService.js';
 import * as edge from './edgeTts.js';
 import * as gemini from './geminiTts.js';
 
